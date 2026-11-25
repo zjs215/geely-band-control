@@ -181,9 +181,9 @@ public final class MainActivity extends Activity {
 
         LinearLayout voicePanel = panel();
         LinearLayout voiceHeader = row();
-        voiceHeader.addView(text("米家语音", 18, INK, true), new LinearLayout.LayoutParams(0, -2, 1));
+        voiceHeader.addView(text("语音直控", 18, INK, true), new LinearLayout.LayoutParams(0, -2, 1));
         voiceToggle = new Switch(this);
-        voiceToggle.setContentDescription("米家语音直控");
+        voiceToggle.setContentDescription("语音直控");
         voiceToggle.setThumbTintList(new ColorStateList(new int[][]{{android.R.attr.state_checked}, {}},
                 new int[]{MINT, MUTED}));
         voiceToggle.setOnCheckedChangeListener((button, checked) -> {
@@ -199,7 +199,8 @@ public final class MainActivity extends Activity {
         accessBounds.setMarginStart(dp(8));
         voiceActions.addView(button("指令码", this::showVoiceCommands), accessBounds);
         add(voicePanel, voiceActions, 10);
-        add(voicePanel, text("无需手环或手表，开启「允许车控」与通知权限后，通过小爱触发米家场景即可控车。",
+        add(voicePanel, text("支持小米「米家」与 OPPO/一加「小布指令（Breeno）」。无需手环或手表，开启「允许车控」与通知权限后，触发米家「手机通知」或小布指令「发送提醒」即可控车。"
+                + "\nOPPO/一加侧载安装若无法开启通知权限，请先到「应用信息 → 右上角菜单」开启「允许受限制的设置」。",
                 13, MUTED, false), 8);
         add(screen, voicePanel, 12);
 
@@ -361,9 +362,9 @@ public final class MainActivity extends Activity {
             choices[index] = command.label + "\n" + command.code;
         }
         new AlertDialog.Builder(this)
-                .setTitle("点按复制通知指令码")
+                .setTitle("点按复制语音指令码")
                 .setItems(choices, (dialog, index) -> getSystemService(ClipboardManager.class)
-                        .setPrimaryClip(ClipData.newPlainText("米家指令码", commands[index].code)))
+                        .setPrimaryClip(ClipData.newPlainText("语音指令码", commands[index].code)))
                 .setNegativeButton("关闭", null)
                 .show();
     }
@@ -372,7 +373,7 @@ public final class MainActivity extends Activity {
         boolean armed = app.isArmed();
         boolean hasReady = controls.values().stream().anyMatch(GalaxyWidgets.Control::ready);
         mappingStatus.setText("功能已同步 · " + controls.size() + "/" + WidgetTree.SLOTS.size());
-        controlStatus.setText(armed ? "车控已授权 · 可用米家语音或穿戴端控车"
+        controlStatus.setText(armed ? "车控已授权 · 可用语音直控或穿戴端控车"
                 : hasReady ? "车控未授权 · 点击下方允许后即可控车" : "请先刷新车况或点按上方预览卡片补标按钮");
         liveControl.setText(armed ? "关闭车控" : "允许车控");
         liveControl.setActivated(!armed);
@@ -407,9 +408,8 @@ public final class MainActivity extends Activity {
     private void showBatteryGuide() {
         new AlertDialog.Builder(this)
                 .setTitle("省电策略设置")
-                .setMessage("在「智在银河」的应用信息中，打开「电池用量」或「省电策略」，选择「无限制」。"
-                        + "如果系统提供的是「允许后台活动」，请开启它。"
-                        + "\n\n小米手机也可从「省电与电池 → 应用智能省电」为智在银河选择「无限制」。"
+                .setMessage("在「智在银河」的应用信息中，打开「电池用量」「耗电管理」或「省电策略」，选择「无限制」或开启「允许完全后台行为 / 允许后台活动」。"
+                        + "\n\n小米手机也可从「省电与电池 → 应用智能省电」为智在银河选择「无限制」；OPPO / 一加（ColorOS）可在「耗电管理」开启「允许完全后台行为」和「允许自启动」。"
                         + "\n\n使用 Android 电池优化列表时，选中智在银河并设为「不优化」。")
                 .setNegativeButton("返回", null)
                 .setNeutralButton("电池优化列表", (dialog, which) -> openBatteryOptimizationSettings())
@@ -420,8 +420,8 @@ public final class MainActivity extends Activity {
     private void showLockGuide() {
         new AlertDialog.Builder(this)
                 .setTitle("应用锁定引导")
-                .setMessage("打开最近任务，找到「智在银河」。长按卡片或打开卡片菜单，选择「锁定」或锁形图标。"
-                        + "\n\n部分小米手机可在「手机管家 → 设置 → 优化加速 → 锁定任务」中开启。"
+                .setMessage("打开最近任务，找到「智在银河」。长按卡片或打开卡片右上角菜单，选择「锁定」或锁形图标。"
+                        + "\n\n部分小米手机可在「手机管家 → 设置 → 优化加速 → 锁定任务」中开启；OPPO / 一加（ColorOS）可在最近任务卡片菜单直接锁定。"
                         + "锁定后，一键清理时会保留这个任务。入口随手机系统而异。")
                 .setPositiveButton("知道了", null)
                 .show();
@@ -489,9 +489,9 @@ public final class MainActivity extends Activity {
         }
         new AlertDialog.Builder(this)
                 .setTitle("允许车控")
-                .setMessage("请确认当前卡片选中目标车辆，且映射按钮与银河小组件配置一致。米家语音指令或穿戴端确认将直接触发对应的银河官方按钮。"
-                        + "\n\n安全与免责提示：本工具为独立开源项目，与吉利汽车及小米无官方关联。远程控车存在通信与刷新延迟，车辆实际状态以吉利银河 App 为准；"
-                        + "米家语音收到通知后将直接执行，请谨慎设置触发口令；如搭配穿戴设备使用，请开启锁屏密码，离车或非本人佩戴时及时关闭车控授权。")
+                .setMessage("请确认当前卡片选中目标车辆，且映射按钮与银河小组件配置一致。语音指令（米家 / 小布指令）或穿戴端确认将直接触发对应的银河官方按钮。"
+                        + "\n\n安全与免责提示：本工具为独立开源项目，与吉利汽车、小米及 OPPO 无官方关联。远程控车存在通信与刷新延迟，车辆实际状态以吉利银河 App 为准；"
+                        + "语音直控收到来自米家或小布指令的匹配通知后将直接执行，请谨慎设置触发口令；如搭配穿戴设备使用，请开启锁屏密码，离车或非本人佩戴时及时关闭车控授权。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("已知晓并允许", (dialog, which) -> app.arm())
                 .show();

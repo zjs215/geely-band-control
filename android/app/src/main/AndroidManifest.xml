@@ -27,6 +27,7 @@
         </activity>
         <service android:name=".BandService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <!-- Keep service class name stable so granted NotificationListener access survives upgrades. -->
         <service
             android:name=".MiHomeNotificationListener"
             android:exported="false"

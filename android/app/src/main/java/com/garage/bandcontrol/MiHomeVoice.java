@@ -6,11 +6,24 @@ import java.util.Map;
 import java.util.Set;
 
 final class MiHomeVoice {
-    private static final String PACKAGE = "com.xiaomi.smarthome";
+    private static final String CODE_PREFIX = "GARAGE_V1:";
     private static final String[] FIELDS = {"正文", "展开正文", "标题"};
     static final long MAX_AGE_MS = 30_000;
     static final long CONTROL_REPEAT_MS = 5_000;
     private static final int RECENT_LIMIT = 64;
+
+    enum Source {
+        MI_HOME("com.xiaomi.smarthome", "米家"),
+        COLOROS_SHORTCUTS("com.coloros.shortcuts", "小布指令");
+
+        final String packageName;
+        final String label;
+
+        Source(String packageName, String label) {
+            this.packageName = packageName;
+            this.label = label;
+        }
+    }
 
     enum Command {
         TEST(null, "测试", null),
@@ -37,7 +50,7 @@ final class MiHomeVoice {
         }
 
         Command(CarAction action, String label, ControlDirection requiredDirection) {
-            this.code = "GARAGE_V1:" + name();
+            this.code = CODE_PREFIX + name();
             this.action = action;
             this.label = label;
             this.requiredDirection = requiredDirection;
@@ -49,8 +62,10 @@ final class MiHomeVoice {
         }
 
         static Command fromText(CharSequence text) {
+            if (text == null) return null;
+            String normalized = text.toString().trim();
             for (Command command : values()) {
-                if (text != null && command.code.contentEquals(text)) return command;
+                if (command.code.equals(normalized)) return command;
             }
             return null;
         }
@@ -64,7 +79,15 @@ final class MiHomeVoice {
     private final Set<Notice> notices = new LinkedHashSet<>();
     private final Map<Command, Long> nextControlAt = new EnumMap<>(Command.class);
 
-    static boolean isSource(String packageName) { return PACKAGE.equals(packageName); }
+    static Source sourceOf(String packageName) {
+        if (packageName == null) return null;
+        for (Source source : Source.values()) {
+            if (source.packageName.equals(packageName)) return source;
+        }
+        return null;
+    }
+
+    static boolean isSource(String packageName) { return sourceOf(packageName) != null; }
 
     static Match match(CharSequence text, CharSequence bigText, CharSequence title) {
         CharSequence[] values = {text, bigText, title};
@@ -76,6 +99,20 @@ final class MiHomeVoice {
             else if (match.command() != command) return null;
         }
         return match;
+    }
+
+    static String unmatchedHint(CharSequence text, CharSequence bigText, CharSequence title) {
+        CharSequence[] values = {text, bigText, title};
+        StringBuilder fields = new StringBuilder();
+        for (int index = 0; index < values.length; index++) {
+            CharSequence value = values[index];
+            if (value != null && value.toString().contains(CODE_PREFIX)) {
+                if (fields.length() > 0) fields.append('、');
+                fields.append(FIELDS[index]);
+            }
+        }
+        if (fields.length() == 0) return "";
+        return fields + "含指令前缀但未精确匹配，请确保内容仅填指令码且无冲突";
     }
 
     Admission receive(String key, long postedAt, long now, long elapsed, Command command) {

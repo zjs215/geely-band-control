@@ -19,15 +19,24 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 public final class MiHomeVoiceTest {
-    @Test public void acceptsOnlyTheOfficialPackage() {
+    @Test public void acceptsOnlySupportedVoicePackages() {
+        assertEquals(MiHomeVoice.Source.MI_HOME, MiHomeVoice.sourceOf("com.xiaomi.smarthome"));
+        assertEquals(MiHomeVoice.Source.COLOROS_SHORTCUTS, MiHomeVoice.sourceOf("com.coloros.shortcuts"));
         assertTrue(MiHomeVoice.isSource("com.xiaomi.smarthome"));
+        assertTrue(MiHomeVoice.isSource("com.coloros.shortcuts"));
+        assertFalse(MiHomeVoice.isSource("com.heytap.speechassist"));
         assertFalse(MiHomeVoice.isSource("com.xiaomi.smarthome.other"));
+        assertFalse(MiHomeVoice.isSource("com.coloros.shortcuts.other"));
         assertFalse(MiHomeVoice.isSource("米家"));
+        assertFalse(MiHomeVoice.isSource("小布指令"));
+        assertFalse(MiHomeVoice.isSource(null));
     }
 
-    @Test public void recognizesExactCodesAndRejectsConflictingFields() {
+    @Test public void recognizesExactAndTrimmedCodesAndRejectsConflictingFields() {
         assertEquals(new MiHomeVoice.Match(TEST, "正文"),
                 MiHomeVoice.match(new StringBuilder(TEST.code), TEST.code, "米家"));
+        assertEquals(new MiHomeVoice.Match(TEST, "正文"),
+                MiHomeVoice.match("  " + TEST.code + "\n", null, "小布指令"));
         assertEquals(new MiHomeVoice.Match(FIND, "展开正文"),
                 MiHomeVoice.match("米家", FIND.code, null));
         assertEquals(new MiHomeVoice.Match(FIND, "标题"),
@@ -35,8 +44,17 @@ public final class MiHomeVoiceTest {
         assertEquals(CarAction.FIND, FIND.action);
         assertNull(TEST.action);
         assertNull(MiHomeVoice.match("手机通知 " + FIND.code, null, null));
+        assertNull(MiHomeVoice.match("提醒：" + FIND.code, null, null));
         assertNull(MiHomeVoice.match("GARAGE_V1:UNKNOWN", null, null));
         assertNull(MiHomeVoice.match(TEST.code, null, FIND.code));
+    }
+
+    @Test public void unmatchedHintOnlyFlagsMessagesWithCommandPrefix() {
+        assertEquals("", MiHomeVoice.unmatchedHint("记得下楼拿快递", null, "小布指令"));
+        assertEquals("正文含指令前缀但未精确匹配，请确保内容仅填指令码且无冲突",
+                MiHomeVoice.unmatchedHint("提醒：" + FIND.code, null, "小布指令"));
+        assertEquals("正文、标题含指令前缀但未精确匹配，请确保内容仅填指令码且无冲突",
+                MiHomeVoice.unmatchedHint(TEST.code, null, FIND.code));
     }
 
     @Test public void everyCarActionHasAnExactVoiceCode() {

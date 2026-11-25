@@ -176,7 +176,7 @@ public final class GarageApp extends Application {
     void setVoiceEnabled(boolean enabled) {
         voiceEnabled = enabled;
         prefs.edit().putBoolean(VOICE_ENABLED, enabled).apply();
-        appendEvent(enabled ? "语音直控已开启" : "语音直控已关闭", "米家语音", false);
+        appendEvent(enabled ? "语音直控已开启" : "语音直控已关闭", "米家 / 小布指令", false);
         updateWidgetListening();
         changed();
     }
@@ -184,7 +184,7 @@ public final class GarageApp extends Application {
     void setVoiceListenerConnected(boolean connected) {
         if (voiceListenerConnected == connected) return;
         voiceListenerConnected = connected;
-        appendEvent(connected ? "通知监听已连接" : "通知监听已断开", "米家语音", !connected);
+        appendEvent(connected ? "通知监听已连接" : "通知监听已断开", "语音直控", !connected);
         updateWidgetListening();
         changed();
     }
@@ -289,22 +289,23 @@ public final class GarageApp extends Application {
         changed();
     }
 
-    void onVoiceNotification(String key, long postedAt, MiHomeVoice.Match match) {
+    void onVoiceNotification(MiHomeVoice.Source source, String key, long postedAt, MiHomeVoice.Match match) {
         if (!voiceEnabled) return;
         MiHomeVoice.Command command = match.command();
         String id = Long.toString(postedAt, 36) + "-" + Integer.toUnsignedString(key.hashCode(), 36);
         MiHomeVoice.Admission admission = voiceNotifications.receive(key, postedAt,
                 System.currentTimeMillis(), SystemClock.elapsedRealtime(), command);
         if (admission != MiHomeVoice.Admission.ACCEPTED) {
-            Log.i(TAG, "event=voice_notification_ignored id=" + id + " reason=" + admission);
+            Log.i(TAG, "event=voice_notification_ignored id=" + id + " source=" + source.packageName
+                    + " reason=" + admission);
             return;
         }
-        Log.i(TAG, "event=voice_notification_received id=" + id + " command=" + command
-                + " field=" + match.field());
-        appendEvent("米家通知已接收", "已匹配「" + command.label + "」 · " + match.field(), false);
+        Log.i(TAG, "event=voice_notification_received id=" + id + " source=" + source.packageName
+                + " command=" + command + " field=" + match.field());
+        appendEvent(source.label + "通知已接收", "已匹配「" + command.label + "」 · " + match.field(), false);
         if (command == MiHomeVoice.Command.TEST) {
-            voiceTestResult = "已收到测试通知（" + match.field() + "）";
-            appendEvent("通知测试通过", "已收到测试通知 · " + match.field(), false);
+            voiceTestResult = "已收到" + source.label + "测试通知（" + match.field() + "）";
+            appendEvent("通知测试通过", "已收到" + source.label + "测试通知 · " + match.field(), false);
             changed();
             return;
         }
@@ -314,9 +315,16 @@ public final class GarageApp extends Application {
         if (blocked.isEmpty()) blocked = command.directionBlock(control.target().direction());
         DispatchResult result = blocked.isEmpty() ? dispatchControl(action, control.target())
                 : new DispatchResult("blocked", blocked);
-        Log.i(TAG, "event=dispatch_result id=" + id + " type=voice action=" + action.id
-                + " command=" + command + " result=" + result.state());
+        Log.i(TAG, "event=dispatch_result id=" + id + " type=voice source=" + source.packageName
+                + " action=" + action.id + " command=" + command + " result=" + result.state());
         setResult("语音" + command.label + " · " + result.note());
+    }
+
+    void onUnmatchedVoiceNotification(MiHomeVoice.Source source, String hint) {
+        if (!voiceEnabled) return;
+        Log.i(TAG, "event=voice_notification_unmatched source=" + source.packageName + " hint=" + hint);
+        appendEvent(source.label + "通知未匹配", hint, true);
+        changed();
     }
 
     private void onBandMessage(String node, byte[] data) {

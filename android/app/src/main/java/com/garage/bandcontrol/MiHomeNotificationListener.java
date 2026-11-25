@@ -29,13 +29,21 @@ public final class MiHomeNotificationListener extends NotificationListenerServic
 
     @Override public void onNotificationPosted(StatusBarNotification posted) {
         GarageApp app = app();
-        if (!app.voiceEnabled() || !MiHomeVoice.isSource(posted.getPackageName())) return;
+        MiHomeVoice.Source source = MiHomeVoice.sourceOf(posted.getPackageName());
+        if (!app.voiceEnabled() || source == null) return;
         Notification notification = posted.getNotification();
         Bundle extras = notification.extras;
         if (extras == null || (notification.flags & Notification.FLAG_GROUP_SUMMARY) != 0) return;
-        MiHomeVoice.Match match = MiHomeVoice.match(extras.getCharSequence(Notification.EXTRA_TEXT),
-                extras.getCharSequence(Notification.EXTRA_BIG_TEXT), extras.getCharSequence(Notification.EXTRA_TITLE));
-        if (match != null) app.onVoiceNotification(posted.getKey(), posted.getPostTime(), match);
+        CharSequence text = extras.getCharSequence(Notification.EXTRA_TEXT);
+        CharSequence bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT);
+        CharSequence title = extras.getCharSequence(Notification.EXTRA_TITLE);
+        MiHomeVoice.Match match = MiHomeVoice.match(text, bigText, title);
+        if (match != null) {
+            app.onVoiceNotification(source, posted.getKey(), posted.getPostTime(), match);
+            return;
+        }
+        String hint = MiHomeVoice.unmatchedHint(text, bigText, title);
+        if (!hint.isEmpty()) app.onUnmatchedVoiceNotification(source, hint);
     }
 
     private GarageApp app() { return (GarageApp) getApplication(); }
