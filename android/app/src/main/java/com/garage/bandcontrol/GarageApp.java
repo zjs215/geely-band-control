@@ -31,6 +31,7 @@ public final class GarageApp extends Application {
     private static final String DISPATCHED = "已发送命令";
     private static final String UNMAPPED = "请在手机核对银河小组件配置";
     private static final String VOICE_ENABLED = "miHomeVoiceEnabled";
+    private static final String SHORTCUT_TOKEN = "voiceShortcutToken";
     private static final String VEHICLE_NAME_KEY = "vehicleName";
     private static final int MAX_VEHICLE_NAME_LENGTH = 24;
     private static final long CONTROL_WAIT_MS = 5_000;
@@ -68,6 +69,7 @@ public final class GarageApp extends Application {
     private boolean serviceRunning;
     private boolean voiceEnabled;
     private boolean voiceListenerConnected;
+    private String shortcutToken = "";
     private String vehicleName = DEFAULT_VEHICLE_NAME;
     private int armedCardId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private Dispatch dispatch;
@@ -85,6 +87,11 @@ public final class GarageApp extends Application {
         super.onCreate();
         prefs = getSharedPreferences("garage", MODE_PRIVATE);
         voiceEnabled = prefs.getBoolean(VOICE_ENABLED, false);
+        shortcutToken = prefs.getString(SHORTCUT_TOKEN, "");
+        if (shortcutToken.isEmpty()) {
+            shortcutToken = VoiceShortcuts.generateToken();
+            prefs.edit().putString(SHORTCUT_TOKEN, shortcutToken).apply();
+        }
         vehicleName = normalizeVehicleName(prefs.getString(VEHICLE_NAME_KEY, DEFAULT_VEHICLE_NAME));
         try {
             JSONArray saved = new JSONArray(prefs.getString("uiEvents", "[]"));
@@ -109,6 +116,7 @@ public final class GarageApp extends Application {
     boolean voiceEnabled() { return voiceEnabled; }
     boolean voiceListenerConnected() { return voiceListenerConnected; }
     String voiceTestResult() { return voiceTestResult; }
+    String shortcutToken() { return shortcutToken; }
     String vehicleName() { return vehicleName; }
 
     static String normalizeVehicleName(String raw) {
@@ -176,8 +184,9 @@ public final class GarageApp extends Application {
     void setVoiceEnabled(boolean enabled) {
         voiceEnabled = enabled;
         prefs.edit().putBoolean(VOICE_ENABLED, enabled).apply();
-        appendEvent(enabled ? "语音直控已开启" : "语音直控已关闭", "米家 / 小布指令", false);
+        appendEvent(enabled ? "语音直控已开启" : "语音直控已关闭", "通知 / 快捷指令", false);
         updateWidgetListening();
+        VoiceShortcuts.syncDynamicShortcuts(this, widgets.controls().keySet(), shortcutToken);
         changed();
     }
 
@@ -275,6 +284,7 @@ public final class GarageApp extends Application {
             }
         }
         updateConfirmationNotice();
+        VoiceShortcuts.syncDynamicShortcuts(this, widgets.controls().keySet(), shortcutToken);
         changed();
     }
 
@@ -309,14 +319,8 @@ public final class GarageApp extends Application {
             changed();
             return;
         }
-        CarAction action = command.action;
-        GalaxyWidgets.Control control = control(action);
-        String blocked = voiceBlockedReason(control);
-        if (blocked.isEmpty()) blocked = command.directionBlock(control.target().direction());
-        DispatchResult result = blocked.isEmpty() ? dispatchControl(action, control.target())
-                : new DispatchResult("blocked", blocked);
-        Log.i(TAG, "event=dispatch_result id=" + id + " type=voice source=" + source.packageName
-                + " action=" + action.id + " command=" + command + " result=" + result.state());
+        DispatchResult result = dispatchVoiceCommand(command,
+                "id=" + id + " type=voice source=" + source.packageName);
         setResult("语音" + command.label + " · " + result.note());
     }
 
@@ -325,6 +329,33 @@ public final class GarageApp extends Application {
         Log.i(TAG, "event=voice_notification_unmatched source=" + source.packageName + " hint=" + hint);
         appendEvent(source.label + "通知未匹配", hint, true);
         changed();
+    }
+
+    String onVoiceShortcut(MiHomeVoice.Command command) {
+        if (!voiceEnabled) {
+            appendEvent("快捷指令未执行", "请先开启「语音直控」", true);
+            changed();
+            return "请先在智在银河开启「语音直控」";
+        }
+        if (voiceNotifications.receiveShortcut(SystemClock.elapsedRealtime(), command) != MiHomeVoice.Admission.ACCEPTED) {
+            return command.label + " · 指令刚刚已触发，请稍后再试";
+        }
+        appendEvent("语音快捷方式已触发", "已匹配「" + command.label + "」", false);
+        DispatchResult result = dispatchVoiceCommand(command, "type=shortcut");
+        setResult("快捷" + command.label + " · " + result.note());
+        return command.label + " · " + result.note().replace("已发送命令", "指令已发送");
+    }
+
+    private DispatchResult dispatchVoiceCommand(MiHomeVoice.Command command, String logContext) {
+        CarAction action = command.action;
+        GalaxyWidgets.Control control = control(action);
+        String blocked = voiceBlockedReason(control);
+        if (blocked.isEmpty()) blocked = command.directionBlock(control.target().direction());
+        DispatchResult result = blocked.isEmpty() ? dispatchControl(action, control.target())
+                : new DispatchResult("blocked", blocked);
+        Log.i(TAG, "event=dispatch_result " + logContext + " action=" + action.id
+                + " command=" + command + " result=" + result.state());
+        return result;
     }
 
     private void onBandMessage(String node, byte[] data) {

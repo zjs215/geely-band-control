@@ -14,7 +14,8 @@ final class MiHomeVoice {
 
     enum Source {
         MI_HOME("com.xiaomi.smarthome", "米家"),
-        COLOROS_SHORTCUTS("com.coloros.shortcuts", "小布指令");
+        COLOROS_SHORTCUTS("com.coloros.shortcuts", "小布指令"),
+        HONOR_MAGIC_HOME("com.hihonor.magichome", "荣耀智慧空间");
 
         final String packageName;
         final String label;
@@ -125,6 +126,13 @@ final class MiHomeVoice {
             if (elapsed < nextControlAt.getOrDefault(command, 0L)) return Admission.DUPLICATE;
             nextControlAt.put(command, elapsed + CONTROL_REPEAT_MS);
         }
+        return Admission.ACCEPTED;
+    }
+
+    Admission receiveShortcut(long elapsed, Command command) {
+        if (command == null || command.action == null) return Admission.STALE;
+        if (elapsed < nextControlAt.getOrDefault(command, 0L)) return Admission.DUPLICATE;
+        nextControlAt.put(command, elapsed + CONTROL_REPEAT_MS);
         return Admission.ACCEPTED;
     }
 }

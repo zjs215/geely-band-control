@@ -199,8 +199,10 @@ public final class MainActivity extends Activity {
         accessBounds.setMarginStart(dp(8));
         voiceActions.addView(button("指令码", this::showVoiceCommands), accessBounds);
         add(voicePanel, voiceActions, 10);
-        add(voicePanel, text("支持小米「米家」与 OPPO/一加「小布指令（Breeno）」。无需手环或手表，开启「允许车控」与通知权限后，触发米家「手机通知」或小布指令「发送提醒」即可控车。"
-                + "\nOPPO/一加侧载安装若无法开启通知权限，请先到「应用信息 → 右上角菜单」开启「允许受限制的设置」。",
+        add(voicePanel, button("添加桌面 / 语音快捷方式", this::showVoiceShortcuts), 8);
+        add(voicePanel, text("• 通知方案：支持小米「米家」、OPPO/一加「小布指令」、荣耀「智慧空间（视版本）」。开启通知权限与「语音直控」后通过语音发对应通知即可控车。"
+                + "\n• 快捷方式方案（vivo 蓝心小V / 荣耀 YOYO / 全机型）：点击上方「添加桌面 / 语音快捷方式」，再在「蓝心小V → 快捷指令（一键指令或教学录制）」或「YOYO → 快捷指令」绑定对应快捷方式，说出指令名即可控车。"
+                + "\n• 侧载提示：Android 13+（ColorOS / OriginOS / MagicOS）若通知使用权开关为灰色，请先到「应用信息 → 右上角菜单」开启「允许受限制的设置」。",
                 13, MUTED, false), 8);
         add(screen, voicePanel, 12);
 
@@ -281,8 +283,8 @@ public final class MainActivity extends Activity {
     private void updateVoiceControls() {
         boolean enabled = app.voiceEnabled();
         voiceToggle.setChecked(enabled);
-        String permission = !MiHomeNotificationListener.hasAccess(this) ? "待授权通知权限"
-                : app.voiceListenerConnected() ? "通知已就绪" : "正在连接通知服务";
+        String permission = !MiHomeNotificationListener.hasAccess(this) ? "快捷指令可用（通知待授权）"
+                : app.voiceListenerConnected() ? "通知监听已就绪" : "正在连接通知服务";
         voiceStatus.setText((enabled ? "已开启" : "已关闭") + " · " + permission);
 
     }
@@ -369,6 +371,29 @@ public final class MainActivity extends Activity {
                 .show();
     }
 
+    private void showVoiceShortcuts() {
+        List<MiHomeVoice.Command> commands = VoiceShortcuts.allControlCommands();
+        Map<CarAction, GalaxyWidgets.Control> mapped = app.widgets.controls();
+        String[] choices = new String[commands.size()];
+        for (int index = 0; index < commands.size(); index++) {
+            MiHomeVoice.Command command = commands.get(index);
+            choices[index] = mapped.containsKey(command.action)
+                    ? command.label + "（当前卡片已配置）" : command.label;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("添加桌面 / 语音快捷方式")
+                .setItems(choices, (dialog, index) -> {
+                    MiHomeVoice.Command selected = commands.get(index);
+                    if (VoiceShortcuts.pinShortcut(this, selected, app.shortcutToken())) {
+                        toast("已请求添加「银河" + selected.label + "」快捷方式");
+                    } else {
+                        toast("当前桌面不支持固定快捷方式，可长按应用图标使用快捷方式");
+                    }
+                })
+                .setNegativeButton("关闭", null)
+                .show();
+    }
+
     private void updateBandControls(Map<CarAction, GalaxyWidgets.Control> controls) {
         boolean armed = app.isArmed();
         boolean hasReady = controls.values().stream().anyMatch(GalaxyWidgets.Control::ready);
@@ -408,8 +433,11 @@ public final class MainActivity extends Activity {
     private void showBatteryGuide() {
         new AlertDialog.Builder(this)
                 .setTitle("省电策略设置")
-                .setMessage("在「智在银河」的应用信息中，打开「电池用量」「耗电管理」或「省电策略」，选择「无限制」或开启「允许完全后台行为 / 允许后台活动」。"
-                        + "\n\n小米手机也可从「省电与电池 → 应用智能省电」为智在银河选择「无限制」；OPPO / 一加（ColorOS）可在「耗电管理」开启「允许完全后台行为」和「允许自启动」。"
+                .setMessage("在「智在银河」的应用信息中，打开「电池用量」「耗电管理」或「电池优化」，选择「无限制」或开启「允许完全后台行为 / 允许高耗电 / 允许后台活动」。"
+                        + "\n\n• 小米：省电与电池 → 应用智能省电 → 无限制"
+                        + "\n• OPPO / 一加（ColorOS）：耗电管理 → 允许完全后台行为 + 允许自启动"
+                        + "\n• vivo（OriginOS）：电池 → 后台耗电管理 → 允许后台高耗电 + 允许自启动"
+                        + "\n• 荣耀（MagicOS）：应用启动管理 → 关闭自动管理，开启允许自启动与后台活动"
                         + "\n\n使用 Android 电池优化列表时，选中智在银河并设为「不优化」。")
                 .setNegativeButton("返回", null)
                 .setNeutralButton("电池优化列表", (dialog, which) -> openBatteryOptimizationSettings())
@@ -420,8 +448,8 @@ public final class MainActivity extends Activity {
     private void showLockGuide() {
         new AlertDialog.Builder(this)
                 .setTitle("应用锁定引导")
-                .setMessage("打开最近任务，找到「智在银河」。长按卡片或打开卡片右上角菜单，选择「锁定」或锁形图标。"
-                        + "\n\n部分小米手机可在「手机管家 → 设置 → 优化加速 → 锁定任务」中开启；OPPO / 一加（ColorOS）可在最近任务卡片菜单直接锁定。"
+                .setMessage("打开最近任务，找到「智在银河」。长按卡片或打开卡片右上角菜单，选择「锁定」或锁形图标（荣耀 MagicOS 可向下拉动卡片加锁）。"
+                        + "\n\n部分小米手机可在「手机管家 → 设置 → 优化加速 → 锁定任务」中开启；ColorOS / OriginOS / MagicOS 可在最近任务卡片菜单直接锁定。"
                         + "锁定后，一键清理时会保留这个任务。入口随手机系统而异。")
                 .setPositiveButton("知道了", null)
                 .show();

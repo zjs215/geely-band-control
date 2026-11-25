@@ -22,11 +22,14 @@ public final class MiHomeVoiceTest {
     @Test public void acceptsOnlySupportedVoicePackages() {
         assertEquals(MiHomeVoice.Source.MI_HOME, MiHomeVoice.sourceOf("com.xiaomi.smarthome"));
         assertEquals(MiHomeVoice.Source.COLOROS_SHORTCUTS, MiHomeVoice.sourceOf("com.coloros.shortcuts"));
+        assertEquals(MiHomeVoice.Source.HONOR_MAGIC_HOME, MiHomeVoice.sourceOf("com.hihonor.magichome"));
         assertTrue(MiHomeVoice.isSource("com.xiaomi.smarthome"));
         assertTrue(MiHomeVoice.isSource("com.coloros.shortcuts"));
+        assertTrue(MiHomeVoice.isSource("com.hihonor.magichome"));
         assertFalse(MiHomeVoice.isSource("com.heytap.speechassist"));
         assertFalse(MiHomeVoice.isSource("com.xiaomi.smarthome.other"));
         assertFalse(MiHomeVoice.isSource("com.coloros.shortcuts.other"));
+        assertFalse(MiHomeVoice.isSource("com.hihonor.magichome.other"));
         assertFalse(MiHomeVoice.isSource("米家"));
         assertFalse(MiHomeVoice.isSource("小布指令"));
         assertFalse(MiHomeVoice.isSource(null));
@@ -110,5 +113,16 @@ public final class MiHomeVoiceTest {
         long repeat = MiHomeVoice.CONTROL_REPEAT_MS;
         assertEquals(DUPLICATE, voice.receive("redelivery", now + 1, now + repeat, repeat, FIND));
         assertEquals(ACCEPTED, voice.receive("new-find", now + repeat, now + repeat, repeat, FIND));
+    }
+
+    @Test public void shortcutRepeatWindowSharesCooldownWithNotifications() {
+        MiHomeVoice voice = new MiHomeVoice();
+        assertEquals(STALE, voice.receiveShortcut(100, TEST));
+        assertEquals(STALE, voice.receiveShortcut(100, null));
+        assertEquals(ACCEPTED, voice.receiveShortcut(100, FIND));
+        assertEquals(DUPLICATE, voice.receiveShortcut(100 + MiHomeVoice.CONTROL_REPEAT_MS - 1, FIND));
+        assertEquals(ACCEPTED, voice.receiveShortcut(100 + MiHomeVoice.CONTROL_REPEAT_MS, FIND));
+        assertEquals(DUPLICATE, voice.receive("notify-find", 60_000, 60_000,
+                100 + MiHomeVoice.CONTROL_REPEAT_MS + 1, FIND));
     }
 }

@@ -25,6 +25,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Exported for system LauncherApps / voice shortcuts, protected by per-install secret token. -->
+        <activity
+            android:name=".VoiceShortcutActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleInstance"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <service android:name=".BandService" android:exported="false"
             android:foregroundServiceType="connectedDevice" />
         <!-- Keep service class name stable so granted NotificationListener access survives upgrades. -->
