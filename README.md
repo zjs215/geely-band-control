@@ -13,17 +13,17 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 
 项目原创代码和自绘素材采用 [Apache-2.0](LICENSE)。通信 SDK 和主题素材的来源见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-## 下载 v0.2.9
+## 下载 v0.2.10
 
-手机、手环和 Watch 5 安装包均为 **0.2.9**，可覆盖安装同签名的旧版。
+手机、手环和 Watch 5 安装包均为 **0.2.10**，可覆盖安装同签名的旧版。
 
 | 设备 | 安装包 |
 | --- | --- |
-| Android 手机 | [手机 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/galaxy-phone.apk) |
-| 小米手环 10 Pro / 9 Pro / 8 Pro、手环 10、支持 Vela RPK 的圆形手表 | [手环 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/galaxy-vela-band.rpk) |
-| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/galaxy-watch.apk) |
+| Android 手机 | [手机 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/galaxy-phone.apk) |
+| 小米手环 10 Pro / 9 Pro / 8 Pro、手环 10、支持 Vela RPK 的圆形手表 | [手环 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/galaxy-vela-band.rpk) |
+| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/galaxy-watch.apk) |
 
-[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.2.9) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/SHA256SUMS.txt)
+[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.2.10) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/SHA256SUMS.txt)
 
 ## 安装与首次验证
 
@@ -64,7 +64,7 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 
 手机 0.1.22 支持车窗、天窗、车门或后备箱未关闭提醒替代驻车文案时的车锁判断。有效车况和可识别的锁图标共同决定动作，明确行驶状态、未知状态和锁态冲突会被拦截。车锁诊断日志记录卡片原文、准备动作和锁态，便于区分状态拦截与官方回传过程。
 
-车窗结合官方卡片的当前车况和槽内图标判断方向。车窗关闭时提供「窗微开」或「窗全开」。卡片显示「车窗未关」时，已开启的车窗槽提供「关窗」，另一槽等待状态恢复。车况与图标冲突、缺少有效读数或无法识别开关方向时，按钮显示暂不可用。
+车窗直接依据官方卡片槽内识别出的图标方向判断开启或关窗（打开图标对应「窗微开」或「窗全开」，关闭图标对应「关窗」）；无法识别图标方向时，按钮显示暂不可用。
 
 空调、净化、极速升温、极速降温、除霜和哨兵模式按当前官方按钮的图标切换开关文案，例如「开空调／关空调」「开净化／关净化」。确认页显示完整动作，例如「关闭极速降温」。手环把显示的方向带入确认请求，手机在准备和执行时核对当前槽位、图标指纹及方向，状态变化后需重新选择。寻车和后备箱继续使用对应的官方按钮。具体车型的组件远程关后备箱及支持的功能槽位以吉利银河官方配置为准。
 

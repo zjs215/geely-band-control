@@ -504,8 +504,7 @@ class GalaxyWidgets {
                 if (direction == ControlDirection.UNLOCK) title = "解锁车门";
                 if (direction == ControlDirection.LOCK) title = "上锁车门";
             } else if (action.isWindow()) {
-                WindowControl.Decision decision = WindowControl.resolve(
-                        card.validReading ? card.latest.motion() : "", direction);
+                WindowControl.Decision decision = WindowControl.resolve(direction);
                 direction = decision.direction();
                 blockedReason = decision.blockedReason();
                 if (direction == ControlDirection.CLOSE) title = "关闭车窗";

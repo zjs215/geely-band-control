@@ -98,6 +98,7 @@ final class WidgetIcons {
         for (String name : names) {
             // Resolve the installed provider's resource names instead of using build-specific IDs.
             int id = resources.getIdentifier(config.iconPrefix + name, "mipmap", config.packageName);
+            if (id == 0) id = resources.getIdentifier(config.iconPrefix + name, "drawable", config.packageName);
             if (id == 0) continue;
             try {
                 if (resources.getDrawable(id, null) instanceof BitmapDrawable drawable
