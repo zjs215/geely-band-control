@@ -13,17 +13,17 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 
 项目原创代码和自绘素材采用 [Apache-2.0](LICENSE)。通信 SDK 和主题素材的来源见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-## 下载 v0.2.7
+## 下载 v0.2.9
 
-手机、手环和 Watch 5 安装包均为 **0.2.7**，可覆盖安装同签名的旧版。
+手机、手环和 Watch 5 安装包均为 **0.2.9**，可覆盖安装同签名的旧版。
 
 | 设备 | 安装包 |
 | --- | --- |
-| Android 手机 | [手机 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.7/galaxy-phone.apk) |
-| 小米手环 10 Pro / 9 Pro / 8 Pro、手环 10、支持 Vela RPK 的圆形手表 | [手环 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.7/galaxy-vela-band.rpk) |
-| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.7/galaxy-watch.apk) |
+| Android 手机 | [手机 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/galaxy-phone.apk) |
+| 小米手环 10 Pro / 9 Pro / 8 Pro、手环 10、支持 Vela RPK 的圆形手表 | [手环 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/galaxy-vela-band.rpk) |
+| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/galaxy-watch.apk) |
 
-[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.2.7) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.2.7/SHA256SUMS.txt)
+[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.2.9) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.2.9/SHA256SUMS.txt)
 
 ## 安装与首次验证
 

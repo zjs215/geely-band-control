@@ -112,6 +112,10 @@ class GalaxyWidgets {
         private boolean validReading;
         private long carImageRevision = -1;
         private CarImage.Packaged carImage;
+        private long controlIconsRevision = -1;
+        private Boolean controlIconsDay;
+        private Map<String, CarImage.Packaged> controlIcons = Map.of();
+        private final Map<String, CarImage.Packaged> controlIconCache = new LinkedHashMap<>();
 
         Card(int id, HostedView view, List<Binding> bindings) {
             this.id = id;
@@ -384,6 +388,44 @@ class GalaxyWidgets {
         return card.carImage;
     }
 
+    Map<String, CarImage.Packaged> controlIcons(Map<CarAction, Control> controls, Boolean themeDay) {
+        Card card = primary();
+        if (card == null || !hasNormalLayout(card) || tree.loading(card.view) || controls == null || controls.isEmpty()) {
+            return Map.of();
+        }
+        if (card.controlIconsRevision == card.view.revision
+                && java.util.Objects.equals(card.controlIconsDay, themeDay)) {
+            return card.controlIcons;
+        }
+        layoutForScan(card);
+        Map<String, CarImage.Packaged> extracted = new LinkedHashMap<>();
+        for (Map.Entry<CarAction, Control> entry : controls.entrySet()) {
+            Control control = entry.getValue();
+            Target target = control == null ? null : control.target();
+            View iconView = target == null ? null : target.button().iconView();
+            if (iconView == null) continue;
+            CarImage.Packaged icon = ControlIcons.extract(iconView, themeDay);
+            if (icon == null) continue;
+            extracted.put(entry.getKey().id, icon);
+            card.controlIconCache.remove(icon.hash());
+            card.controlIconCache.put(icon.hash(), icon);
+            while (card.controlIconCache.size() > 32) {
+                String oldest = card.controlIconCache.keySet().iterator().next();
+                card.controlIconCache.remove(oldest);
+            }
+        }
+        card.controlIcons = extracted.isEmpty() ? Map.of() : Collections.unmodifiableMap(extracted);
+        card.controlIconsRevision = card.view.revision;
+        card.controlIconsDay = themeDay;
+        return card.controlIcons;
+    }
+
+    CarImage.Packaged controlIcon(String hash) {
+        if (hash == null || hash.isEmpty()) return null;
+        Card card = primary();
+        return card == null ? null : card.controlIconCache.get(hash);
+    }
+
     boolean showsLastReading() {
         Card card = primary();
         return card != null && !card.validReading && card.latest.updatedAt() != 0;
@@ -410,6 +452,9 @@ class GalaxyWidgets {
             card.lynkSlotLabels.clear();
             card.carImage = null;
             card.carImageRevision = -1;
+            card.controlIcons = Map.of();
+            card.controlIconsRevision = -1;
+            card.controlIconsDay = null;
             if (refresh != null && refresh.card == card) finishRefresh("blocked", "当前卡片没有可读取的车辆");
             return;
         }
@@ -441,9 +486,6 @@ class GalaxyWidgets {
         Map<CarAction, Control> live = new LinkedHashMap<>();
         Map<String, CarAction> liveSlots = new LinkedHashMap<>();
         List<WidgetTree.Button> buttons = buttons(card);
-        boolean activeWindowSlot = buttons.stream().map(WidgetTree.Button::match)
-                .anyMatch(match -> match != null && match.action().isWindow()
-                        && match.direction() == ControlDirection.CLOSE);
         for (WidgetTree.Button button : buttons) {
             if (!button.role().isEmpty()) continue;
             Binding binding = card.binding(button);
@@ -463,7 +505,7 @@ class GalaxyWidgets {
                 if (direction == ControlDirection.LOCK) title = "上锁车门";
             } else if (action.isWindow()) {
                 WindowControl.Decision decision = WindowControl.resolve(
-                        card.validReading ? card.latest.motion() : "", direction, activeWindowSlot);
+                        card.validReading ? card.latest.motion() : "", direction);
                 direction = decision.direction();
                 blockedReason = decision.blockedReason();
                 if (direction == ControlDirection.CLOSE) title = "关闭车窗";

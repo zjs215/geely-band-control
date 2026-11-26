@@ -26,7 +26,12 @@ final class WidgetTree {
     static final String LOCKED = "locked";
     static final String UNLOCKED = "unlocked";
     record Button(View view, String slot, String fingerprint, Rect bounds, String label, String role,
-                  WidgetIcons.Match match, LynkWidgetIcons.Kind lynkIcon) {}
+                  WidgetIcons.Match match, LynkWidgetIcons.Kind lynkIcon, View iconView) {
+        Button(View view, String slot, String fingerprint, Rect bounds, String label, String role,
+               WidgetIcons.Match match, LynkWidgetIcons.Kind lynkIcon) {
+            this(view, slot, fingerprint, bounds, label, role, match, lynkIcon, null);
+        }
+    }
     record OfficialConfirmation(View accept, View cancel, String title) {}
 
     final BrandConfig config;
@@ -154,7 +159,7 @@ final class WidgetTree {
                 LynkWidgetIcons.Kind lynkIcon = lynkIcons == null || loading(root)
                         ? null : lynkIcons.identify(image, label, providerVersion);
                 buttons.add(new Button(click, slotName, fingerprint(icon, identity), bounds(root, click), label, "",
-                        match, lynkIcon));
+                        match, lynkIcon, icon));
             } catch (RuntimeException unsupportedDrawable) {
                 // A failed icon render leaves this slot unavailable until its identity can be checked.
             }

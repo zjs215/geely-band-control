@@ -18,8 +18,8 @@ android {
         applicationId 'com.garage.bandcontrol'
         minSdk 28
         targetSdk 35
-        versionCode 44
-        versionName '0.2.7'
+        versionCode 46
+        versionName '0.2.9'
         testInstrumentationRunner 'com.garage.bandcontrol.LynkCardInstrumentation'
     }
 

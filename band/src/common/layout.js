@@ -15,7 +15,7 @@ const CLASS_KEYS = [
   'activeRangeDot', 'vehicleMeta', 'refresh', 'refreshIcon', 'updated',
   'metaDivider', 'connection', 'connectionStatus', 'dot', 'mode', 'settingsIcon', 'empty',
   'grid', 'controlRow', 'toast', 'toastText', 'confirmation',
-  'confirmAction', 'confirmIcon', 'confirmTitle', 'confirmButton',
+  'confirmAction', 'confirmIcon', 'confirmTitle', 'confirmActions', 'confirmButton',
   'cancelButton', 'settingsScreen', 'settingsTitle', 'hapticsSetting',
   'hapticsLabel', 'hapticsSwitch', 'diagnostics', 'diagnosticsTitle',
   'diagnosticsLine', 'settingsBack'
@@ -62,6 +62,7 @@ const BASE_NAMES = {
   confirmAction: 'confirm-action',
   confirmIcon: 'confirm-icon',
   confirmTitle: 'confirm-title',
+  confirmActions: 'confirm-actions',
   confirmButton: 'confirm-button',
   cancelButton: 'cancel-button',
   settingsScreen: 'settings-screen',

@@ -93,7 +93,9 @@ public final class GarageApp extends Application {
     private final List<UiEvent> uiEvents = new ArrayList<>();
     private String observedLink = "";
     private String observedBlock = "";
+    private String observedWindowBlock = "";
     private boolean loggedMissingCarImage;
+    private final Map<String, Boolean> nodeThemeDay = new java.util.LinkedHashMap<>();
     private String lastResult = "";
     private String voiceTestResult = "";
 
@@ -341,11 +343,26 @@ public final class GarageApp extends Application {
             appendEvent("手环通信", observedLink, WearDiagnostics.isWarningStatus(observedLink));
         }
         if (widgets != null) {
-            GalaxyWidgets.Control lock = widgets.controls().get(CarAction.LOCK);
+            Map<CarAction, GalaxyWidgets.Control> current = widgets.controls();
+            GalaxyWidgets.Control lock = current.get(CarAction.LOCK);
             String block = isArmed() && lock != null ? lock.blockedReason() : "";
             if (!block.equals(observedBlock)) {
                 observedBlock = block;
                 if (!block.isEmpty()) appendEvent("车锁暂不可用", block + " · 卡片状态「"
+                        + widgets.vehicle().motion() + "」", true);
+            }
+            String windowBlock = "";
+            if (isArmed()) {
+                for (Map.Entry<CarAction, GalaxyWidgets.Control> entry : current.entrySet()) {
+                    if (entry.getKey().isWindow() && !entry.getValue().blockedReason().isEmpty()) {
+                        windowBlock = entry.getKey().label + ": " + entry.getValue().blockedReason();
+                        break;
+                    }
+                }
+            }
+            if (!windowBlock.equals(observedWindowBlock)) {
+                observedWindowBlock = windowBlock;
+                if (!windowBlock.isEmpty()) appendEvent("车窗暂不可用", windowBlock + " · 卡片状态「"
                         + widgets.vehicle().motion() + "」", true);
             }
         }
@@ -475,6 +492,7 @@ public final class GarageApp extends Application {
                     return hello;
                 });
                 case "status" -> {
+                    if (request.themeDay() != null) nodeThemeDay.put(node, request.themeDay());
                     if (!BluetoothWatchLink.handlesNode(node)) saveBandDisplay(bandDisplay.accept(request.bandDisplay()));
                     reply(node, request, "ready", "已读取手机车况");
                 }
@@ -483,6 +501,7 @@ public final class GarageApp extends Application {
                 case "execute" -> execute(node, request);
                 case "cancel" -> confirmations.cancel(node, request.token());
                 case "car_image" -> sendCarImageChunk(node, request);
+                case "control_icon" -> sendControlIconChunk(node, request);
             }
         } catch (JSONException invalid) {
             Log.w(TAG, "Invalid band message");
@@ -795,19 +814,33 @@ public final class GarageApp extends Application {
         if (index == 0 && image != null && image.hash().equals(hash)) {
             appendEvent("同步车辆图片", "向穿戴端发送官方卡片车图（" + image.chunks().size() + " 片）", false);
         }
+        sendPackagedChunk(node, request, image, false);
+    }
+
+    private void sendControlIconChunk(String node, BandMessage request) {
+        sendPackagedChunk(node, request, widgets.controlIcon(request.imageHash()), true);
+    }
+
+    private void sendPackagedChunk(String node, BandMessage request, CarImage.Packaged packaged, boolean controlIcon) {
+        String hash = request.imageHash();
+        int index = request.imageIndex();
+        String label = controlIcon ? "control_icon" : "car_image";
         String text = BandMessage.encodeReply(request.id(), () -> {
-            if (image == null || !image.hash().equals(hash) || index < 0 || index >= image.chunks().size()) {
-                return BandMessage.carImageReply(request.id(), hash, index, 0, "");
+            if (packaged == null || !packaged.hash().equals(hash) || index < 0 || index >= packaged.chunks().size()) {
+                return controlIcon ? BandMessage.controlIconReply(request.id(), hash, index, 0, "")
+                        : BandMessage.carImageReply(request.id(), hash, index, 0, "");
             }
-            return BandMessage.carImageReply(request.id(), hash, index,
-                    image.chunks().size(), image.chunks().get(index));
-        }, error -> Log.e(TAG, "event=car_image_reply_failed id=" + request.id(), error));
-        link.send(node, text, reason -> Log.i(TAG, "event=car_image_send_failed id=" + request.id() + " reason=" + reason));
+            return controlIcon
+                    ? BandMessage.controlIconReply(request.id(), hash, index, packaged.chunks().size(), packaged.chunks().get(index))
+                    : BandMessage.carImageReply(request.id(), hash, index, packaged.chunks().size(), packaged.chunks().get(index));
+        }, error -> Log.e(TAG, "event=" + label + "_reply_failed id=" + request.id(), error));
+        link.send(node, text, reason -> Log.i(TAG, "event=" + label + "_send_failed id=" + request.id() + " reason=" + reason));
     }
 
     private void send(String node, String id, BandMessage.ReplyBuilder builder) {
+        Boolean themeDay = nodeThemeDay.get(node);
         sendReply(node, id, () -> {
-            JSONObject response = withState(builder.build());
+            JSONObject response = withState(builder.build(), themeDay);
             if (!BluetoothWatchLink.handlesNode(node)) response.put("bandDisplay", bandDisplay.json());
             return response;
         });
@@ -823,7 +856,7 @@ public final class GarageApp extends Application {
                 });
     }
 
-    private JSONObject withState(JSONObject response) throws JSONException {
+    private JSONObject withState(JSONObject response, Boolean themeDay) throws JSONException {
         JSONArray available = new JSONArray();
         JSONArray mapped = new JSONArray();
         response.put("mode", "live")
@@ -837,7 +870,8 @@ public final class GarageApp extends Application {
         JSONObject directions = new JSONObject();
         JSONObject labels = new JSONObject();
         JSONObject states = new JSONObject();
-        for (Map.Entry<CarAction, GalaxyWidgets.Control> entry : widgets.controls().entrySet()) {
+        Map<CarAction, GalaxyWidgets.Control> controls = widgets.controls();
+        for (Map.Entry<CarAction, GalaxyWidgets.Control> entry : controls.entrySet()) {
             String id = entry.getKey().id;
             GalaxyWidgets.Control control = entry.getValue();
             mapped.put(id);
@@ -856,6 +890,15 @@ public final class GarageApp extends Application {
         if (blocked.length() > 0) response.put("blocked", blocked);
         if (brand == BrandConfig.LYNKCO) response.put("controlLabels", labels);
         if (states.length() > 0) response.put("controlStates", states);
+        Map<String, CarImage.Packaged> icons = widgets.controlIcons(controls, themeDay);
+        if (!icons.isEmpty()) {
+            JSONObject actionIcons = new JSONObject();
+            for (Map.Entry<String, CarImage.Packaged> icon : icons.entrySet()) {
+                CarImage.Packaged packaged = icon.getValue();
+                actionIcons.put(icon.getKey(), new JSONArray().put(packaged.hash()).put(packaged.chunks().size()));
+            }
+            response.put("actionIcons", actionIcons);
+        }
         CarImage.Packaged carImage = widgets.carImage();
         if (carImage != null) {
             loggedMissingCarImage = false;

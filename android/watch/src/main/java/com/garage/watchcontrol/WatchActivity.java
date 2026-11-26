@@ -90,6 +90,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private static final String SNAPSHOT_KEY = "vehicle-snapshot";
     private static final String CAR_IMAGE_HASH_KEY = "car-image-hash";
     private static final String CAR_IMAGE_FILE_KEY = "car-image-file";
+    private static final String CONTROL_ICON_CACHE_KEY = "control-icon-cache";
+    private static final int MAX_CONTROL_ICON_FILES = 24;
+    private record IconSyncTarget(String hash, int total) {}
     private static final String EVENTS_KEY = "connection-events";
     private static final String HAPTICS_KEY = "control-haptics";
     private static final String PHONE_ADDR_KEY = "preferred-phone-address";
@@ -188,6 +191,16 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private String imageSyncHash = "";
     private int imageSyncTotal;
     private final List<String> imageSyncChunks = new ArrayList<>();
+    private final Map<String, String> controlIconHashes = new LinkedHashMap<>();
+    private final Map<String, String> controlIconTargets = new LinkedHashMap<>();
+    private final Map<String, String> controlIconFiles = new LinkedHashMap<>();
+    private final List<String> controlIconOrder = new ArrayList<>();
+    private final Map<String, Bitmap> controlIconBitmaps = new LinkedHashMap<>();
+    private final List<String> failedControlIconHashes = new ArrayList<>();
+    private final List<IconSyncTarget> iconSyncQueue = new ArrayList<>();
+    private String iconSyncHash = "";
+    private int iconSyncTotal;
+    private final List<String> iconSyncChunks = new ArrayList<>();
 
     private List<String> mapped = new ArrayList<>();
     private List<String> available = new ArrayList<>();
@@ -237,8 +250,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         setContentView(buildUi());
         themeClock = new ThemeClock(this, this::activeTheme, this::renderTheme);
         loadSnapshot();
-        showDefaultCarImage();
+        loadCachedControlIcons();
         loadCachedCarImage();
+        if (carImageHash.isEmpty()) showDefaultCarImage();
         renderAll();
     }
 
@@ -408,7 +422,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     }
 
     private boolean isBusy() {
-        return pending != null && !"status".equals(pending.type()) && !"car_image".equals(pending.type());
+        return pending != null && !"status".equals(pending.type())
+                && !"car_image".equals(pending.type())
+                && !"control_icon".equals(pending.type());
     }
 
     private void triggerRefresh() {
@@ -434,8 +450,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             if ("prepare".equals(type) || "execute".equals(type)) vibrateFailure();
             return;
         }
-        if (pending != null && (!"status".equals(pending.type()) && !"car_image".equals(pending.type())
-                || "status".equals(type) || "car_image".equals(type))) return;
+        if (pending != null && ((!"status".equals(pending.type()) && !"car_image".equals(pending.type())
+                && !"control_icon".equals(pending.type()))
+                || "status".equals(type) || "car_image".equals(type) || "control_icon".equals(type))) return;
         clearPending();
         main.removeCallbacks(pollTask);
 
@@ -449,7 +466,12 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         try {
             JSONObject request = "car_image".equals(type)
                     ? WatchProtocol.buildCarImageRequest(id, imageSyncHash, imageSyncChunks.size())
+                    : "control_icon".equals(type)
+                    ? WatchProtocol.buildControlIconRequest(id, iconSyncHash, iconSyncChunks.size())
                     : WatchProtocol.buildRequest(id, type, action, token, direction, BuildConfig.VERSION_NAME);
+            if ("status".equals(type) && supportsRequest("control_icon")) {
+                request.put("themeDay", themeStyles.isDay());
+            }
             if ("prepare".equals(type)) request.put("brand", brand);
             if ("execute".equals(type) && features != null && features.contains(WatchProtocol.COMPACT_EXECUTE_ACK)) {
                 request.put("compactAck", true);
@@ -462,7 +484,11 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
                 else if ("car_image".equals(type)) {
                     clearPending();
                     resetImageSync();
-                    schedulePoll();
+                    if (!startNextControlIconSync()) schedulePoll();
+                } else if ("control_icon".equals(type)) {
+                    clearPending();
+                    resetIconSync();
+                    if (!startNextControlIconSync()) schedulePoll();
                 } else disconnect("发送失败，请检查蓝牙连接", "send_failed", req);
             });
         } catch (JSONException invalid) {
@@ -479,7 +505,11 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         } else if ("car_image".equals(req.type())) {
             clearPending();
             resetImageSync();
-            schedulePoll();
+            if (!startNextControlIconSync()) schedulePoll();
+        } else if ("control_icon".equals(req.type())) {
+            clearPending();
+            resetIconSync();
+            if (!startNextControlIconSync()) schedulePoll();
         } else {
             disconnect("手机回复超时，请检查连接", "timeout", req);
         }
@@ -518,6 +548,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             case "refresh" -> "refresh";
             case "prepare", "execute" -> "confirm";
             case "cancel" -> "cancel";
+            case "control_icon" -> WatchProtocol.CONTROL_ICONS_FEATURE;
             default -> type;
         };
         return features == null || features.contains(feature);
@@ -576,7 +607,31 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             String joined = String.join("", imageSyncChunks);
             resetImageSync();
             saveAndDisplayCarImage(completedHash, joined);
-            schedulePoll();
+            if (!startNextControlIconSync()) schedulePoll();
+            return;
+        }
+        if ("control_icon".equals(request.type())) {
+            if (reply.optInt("v") != WatchProtocol.PROTOCOL || !"control_icon_reply".equals(reply.optString("type"))) return;
+            clearPending();
+            String hash = reply.optString("hash");
+            int index = reply.optInt("index", -1);
+            int total = reply.optInt("total", 0);
+            String data = reply.optString("data");
+            if (!hash.equals(iconSyncHash) || index != iconSyncChunks.size() || total <= 0 || data.isEmpty()) {
+                resetIconSync();
+                if (!startNextControlIconSync()) schedulePoll();
+                return;
+            }
+            iconSyncChunks.add(data);
+            if (iconSyncChunks.size() < total) {
+                sendRequest("control_icon", null, null, null);
+                return;
+            }
+            String completedHash = iconSyncHash;
+            String joined = String.join("", iconSyncChunks);
+            resetIconSync();
+            saveAndDisplayControlIcon(completedHash, joined);
+            if (!startNextControlIconSync()) schedulePoll();
             return;
         }
         if (reply.optInt("v") != WatchProtocol.PROTOCOL || !"reply".equals(reply.optString("type"))) return;
@@ -708,6 +763,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             if (!controlPending || phoneConfirmation) showToast(controlNotice);
         }
         renderAll();
+        syncActionIconMetadata(reply.optJSONObject("actionIcons"));
         String imgHash = reply.optString("carImageHash");
         int imgChunks = reply.optInt("carImageChunks", 0);
         boolean checkImage = "status".equals(request.type()) || "refresh".equals(request.type());
@@ -720,6 +776,10 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
                 recordEvent("car_img_start", request, imgHash + "x" + imgChunks);
             }
             sendRequest("car_image", null, null, null);
+            return;
+        }
+        if (checkImage && supportsRequest("control_icon") && !controlPending && confirmTitle.isEmpty()
+                && startNextControlIconSync()) {
             return;
         }
         schedulePoll();
@@ -817,6 +877,8 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         clearPending();
         clearConfirmationState();
         resetImageSync();
+        resetIconSync();
+        iconSyncQueue.clear();
         handshakeComplete = false;
         features = null;
         compatibilityNotice = "";
@@ -889,6 +951,203 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         imageSyncHash = "";
         imageSyncTotal = 0;
         imageSyncChunks.clear();
+    }
+
+    private void resetIconSync() {
+        iconSyncHash = "";
+        iconSyncTotal = 0;
+        iconSyncChunks.clear();
+    }
+
+    private void loadCachedControlIcons() {
+        String raw = prefs.getString(CONTROL_ICON_CACHE_KEY, "");
+        if (raw.isEmpty()) return;
+        try {
+            JSONObject saved = new JSONObject(raw);
+            JSONObject filesObj = saved.optJSONObject("files");
+            JSONArray orderArr = saved.optJSONArray("order");
+            if (filesObj != null) {
+                if (orderArr != null) {
+                    for (int i = 0; i < orderArr.length(); i++) {
+                        String hash = orderArr.optString(i);
+                        String path = filesObj.optString(hash);
+                        if (!hash.isEmpty() && !path.isEmpty() && new File(path).isFile() && !controlIconFiles.containsKey(hash)) {
+                            controlIconFiles.put(hash, path);
+                            controlIconOrder.add(hash);
+                        }
+                    }
+                }
+                var keys = filesObj.keys();
+                while (keys.hasNext()) {
+                    String hash = keys.next();
+                    String path = filesObj.optString(hash);
+                    if (!hash.isEmpty() && !path.isEmpty() && new File(path).isFile() && !controlIconFiles.containsKey(hash)) {
+                        controlIconFiles.put(hash, path);
+                        controlIconOrder.add(hash);
+                    }
+                }
+            }
+            if (brand.equals(saved.optString("brand", "GALAXY"))) {
+                JSONObject actionsObj = saved.optJSONObject("actions");
+                if (actionsObj != null) {
+                    var actionKeys = actionsObj.keys();
+                    while (actionKeys.hasNext()) {
+                        String action = actionKeys.next();
+                        String hash = actionsObj.optString(action);
+                        if (!hash.isEmpty() && controlIconFiles.containsKey(hash)) {
+                            controlIconHashes.put(action, hash);
+                        }
+                    }
+                }
+            }
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private void persistControlIconCache() {
+        try {
+            JSONObject filesObj = new JSONObject();
+            JSONArray orderArr = new JSONArray();
+            for (String hash : controlIconOrder) {
+                String path = controlIconFiles.get(hash);
+                if (path != null && !path.isEmpty()) {
+                    filesObj.put(hash, path);
+                    orderArr.put(hash);
+                }
+            }
+            JSONObject actionsObj = new JSONObject();
+            for (Map.Entry<String, String> entry : controlIconHashes.entrySet()) {
+                if (controlIconFiles.containsKey(entry.getValue())) {
+                    actionsObj.put(entry.getKey(), entry.getValue());
+                }
+            }
+            prefs.edit().putString(CONTROL_ICON_CACHE_KEY, new JSONObject()
+                    .put("brand", brand)
+                    .put("actions", actionsObj)
+                    .put("files", filesObj)
+                    .put("order", orderArr)
+                    .toString()).apply();
+        } catch (JSONException ignored) {
+        }
+    }
+
+    private void syncActionIconMetadata(JSONObject rawIcons) {
+        if (rawIcons == null) return;
+        iconSyncQueue.clear();
+        List<String> seenHashes = new ArrayList<>();
+        boolean changed = false;
+        for (String action : mapped) {
+            JSONArray entry = rawIcons.optJSONArray(action);
+            if (entry == null || entry.length() < 2) continue;
+            String hash = entry.optString(0);
+            int total = entry.optInt(1, 0);
+            if (hash.isEmpty() || total <= 0) continue;
+            controlIconTargets.put(action, hash);
+            String cachedPath = controlIconFiles.get(hash);
+            if (cachedPath != null && new File(cachedPath).isFile()) {
+                if (!hash.equals(controlIconHashes.get(action))) {
+                    controlIconHashes.put(action, hash);
+                    changed = true;
+                }
+            } else if (!failedControlIconHashes.contains(hash) && !seenHashes.contains(hash)) {
+                seenHashes.add(hash);
+                iconSyncQueue.add(new IconSyncTarget(hash, total));
+            }
+        }
+        if (changed) {
+            persistControlIconCache();
+            renderGrid();
+        }
+    }
+
+    private boolean startNextControlIconSync() {
+        if (!visible || !linked || !supportsRequest("control_icon") || !iconSyncHash.isEmpty()) return false;
+        while (!iconSyncQueue.isEmpty()) {
+            IconSyncTarget next = iconSyncQueue.remove(0);
+            if (next.hash().isEmpty() || controlIconFiles.containsKey(next.hash())
+                    || failedControlIconHashes.contains(next.hash())) {
+                continue;
+            }
+            iconSyncHash = next.hash();
+            iconSyncTotal = next.total();
+            iconSyncChunks.clear();
+            sendRequest("control_icon", null, null, null);
+            return true;
+        }
+        return false;
+    }
+
+    private void saveAndDisplayControlIcon(String hash, String base64Text) {
+        try {
+            byte[] png = Base64.decode(base64Text, Base64.DEFAULT);
+            Bitmap bitmap = BitmapFactory.decodeByteArray(png, 0, png.length);
+            if (bitmap == null) {
+                failedControlIconHashes.add(hash);
+                return;
+            }
+            File target = new File(getFilesDir(), "cicon_" + hash + ".png");
+            try (FileOutputStream out = new FileOutputStream(target)) {
+                out.write(png);
+            }
+            controlIconBitmaps.put(hash, bitmap);
+            controlIconFiles.put(hash, target.getAbsolutePath());
+            controlIconOrder.remove(hash);
+            controlIconOrder.add(hash);
+            while (controlIconOrder.size() > MAX_CONTROL_ICON_FILES) {
+                String victim = null;
+                for (String candidate : controlIconOrder) {
+                    if (!controlIconHashes.containsValue(candidate)) {
+                        victim = candidate;
+                        break;
+                    }
+                }
+                if (victim == null) victim = controlIconOrder.get(0);
+                controlIconOrder.remove(victim);
+                String oldPath = controlIconFiles.remove(victim);
+                controlIconBitmaps.remove(victim);
+                if (oldPath != null && !oldPath.isEmpty()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    new File(oldPath).delete();
+                }
+            }
+            boolean changed = false;
+            for (String action : mapped) {
+                if (hash.equals(controlIconTargets.get(action))) {
+                    controlIconHashes.put(action, hash);
+                    changed = true;
+                }
+            }
+            persistControlIconCache();
+            if (changed) renderGrid();
+            if (!confirmTitle.isEmpty() && hash.equals(controlIconHashes.get(confirmAction))) {
+                confirmIconView.setTag(Boolean.TRUE);
+                confirmIconView.clearColorFilter();
+                confirmIconView.setImageBitmap(bitmap);
+            }
+        } catch (IllegalArgumentException | IOException failed) {
+            failedControlIconHashes.add(hash);
+        }
+    }
+
+    private Bitmap controlIconBitmap(String action) {
+        if (action == null || action.isEmpty()) return null;
+        String hash = controlIconHashes.get(action);
+        if (hash == null || hash.isEmpty()) return null;
+        Bitmap cached = controlIconBitmaps.get(hash);
+        if (cached != null && !cached.isRecycled()) return cached;
+        String path = controlIconFiles.get(hash);
+        if (path == null || path.isEmpty()) return null;
+        File file = new File(path);
+        if (!file.isFile()) {
+            controlIconFiles.remove(hash);
+            controlIconOrder.remove(hash);
+            controlIconHashes.remove(action);
+            persistControlIconCache();
+            return null;
+        }
+        Bitmap decoded = BitmapFactory.decodeFile(file.getAbsolutePath());
+        if (decoded != null) controlIconBitmaps.put(hash, decoded);
+        return decoded;
     }
 
     private void showDefaultCarImage() {
@@ -964,6 +1223,11 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         controlStates = null;
         carImageHash = "";
         resetImageSync();
+        resetIconSync();
+        iconSyncQueue.clear();
+        controlIconHashes.clear();
+        controlIconTargets.clear();
+        failedControlIconHashes.clear();
         showDefaultCarImage();
         storedSnapshot = "";
         prefs.edit().putString(SNAPSHOT_KEY, "").apply();
@@ -1084,7 +1348,20 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         homeShell.setVisibility(!showConfirm && !settingsOpen ? View.VISIBLE : View.GONE);
         if (showConfirm) {
             confirmTitleView.setText(confirmTitle);
-            confirmIconView.setImageBitmap(assetBitmap(confirmIconAsset));
+            Bitmap syncedConfirm = controlIconBitmap(confirmAction);
+            if (syncedConfirm != null) {
+                confirmIconView.setTag(Boolean.TRUE);
+                confirmIconView.clearColorFilter();
+                confirmIconView.setImageBitmap(syncedConfirm);
+            } else {
+                confirmIconView.setTag(Boolean.FALSE);
+                if (themeVariant == ThemeConfig.Variant.DAY) {
+                    confirmIconView.setColorFilter(ThemeStyles.DAY.ink());
+                } else {
+                    confirmIconView.clearColorFilter();
+                }
+                confirmIconView.setImageBitmap(assetBitmap(confirmIconAsset));
+            }
             clearToast();
         } else if (settingsOpen) {
             renderDiagnostics();
@@ -1099,7 +1376,8 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         vehicleNameView.setText(vehicleName);
         String refreshText = phoneConfirmation ? "请在手机确认"
                 : controlPending ? "同步中…"
-                : pending != null && !"status".equals(pending.type()) && !"car_image".equals(pending.type()) ? "请稍候…"
+                : pending != null && !"status".equals(pending.type()) && !"car_image".equals(pending.type())
+                && !"control_icon".equals(pending.type()) ? "请稍候…"
                 : updatedLabel;
         connectionLabel.setText(modeLabel);
         vehicleMotionView.setText(motionLabel);
@@ -1130,6 +1408,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         int iconSize = controlColumns == 1 ? r(28) : u(uiScale.roundIcon336(count), count <= 1 ? 48 : count == 2 ? 42 : 32);
         int label336 = uiScale.roundLabel336(count);
         int labelRectSp = count <= 1 ? 17 : count == 2 ? 16 : 14;
+        int tileHeight = controlColumns == 1 ? r(56) : count <= 1 ? r(114) : count == 2 ? r(102) : r(90);
         for (int i = 0; i < count; i += controlColumns) {
             String first = mapped.get(i);
             String second = controlColumns == 2 && i + 1 < count ? mapped.get(i + 1) : null;
@@ -1139,9 +1418,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
             if (i > 0) rowParams.topMargin = r(8);
             row.addView(buildOrbTile(first, orbSize, iconSize, label336, labelRectSp),
-                    new LinearLayout.LayoutParams(0, -2, 1));
+                    new LinearLayout.LayoutParams(0, tileHeight, 1));
             if (second != null) {
-                LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, -2, 1);
+                LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, tileHeight, 1);
                 secondParams.setMarginStart(r(8));
                 row.addView(buildOrbTile(second, orbSize, iconSize, label336, labelRectSp), secondParams);
             }
@@ -1152,7 +1431,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private View buildOrbTile(String action, int orbSize, int iconSize, int label336, int labelRectSp) {
         boolean isAvailable = available.contains(action);
         String direction = controlDirections.get(action);
-        boolean isActive = isAvailable && ("close".equals(direction) || ("lock".equals(action) && "unlock".equals(direction)));
+        boolean isActive = WatchProtocol.isActionActive(action, direction, isAvailable);
         String label = action.startsWith("lynk_") ? WatchProtocol.lynkControlLabel(lynkControlLabels, action)
                 : WatchProtocol.controlLabel(action, direction);
         String slotHint = WatchProtocol.controlHint(controlStates, action);
@@ -1163,39 +1442,37 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         boolean single = controlColumns == 1;
         cell.setOrientation(single ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER);
-        ThemeStyles.Palette palette = ThemeStyles.forVariant(themeVariant);
         boolean day = themeStyles.isDay();
-        int panel = palette == null ? ORB_UNASSIGNED
-                : day ? (isActive ? 0xb3c5e3dc : 0xa3f3f8fc)
-                : isActive ? 0xb32a5648 : 0x8a142235;
+        int panel = isAvailable
+                ? (isActive
+                    ? (day ? 0xdb8ec5ff : 0x9e1862e8)
+                    : (day ? 0xc2f3f8fc : 0xb81d2c43))
+                : (day ? 0x7ae0eaf2 : 0x8f121c2a);
         GradientDrawable tileBackground = rounded(panel, 13);
-        if (palette == null) tileBackground.setStroke(Math.max(1, r(1)), ORB_READY_BORDER);
         cell.setBackground(tileBackground);
-        cell.setMinimumHeight(controlColumns == 1 ? r(56) : r(100));
-        cell.setPadding(r(8), r(4), r(8), r(4));
+        cell.setPadding(r(8), r(3), r(8), r(3));
         if (slotHint.isEmpty()) cell.setOnClickListener(view -> selectAction(action));
         else cell.setEnabled(false);
 
         FrameLayout orb = new FrameLayout(this);
-        if (palette == null) {
-            GradientDrawable orbBg = new GradientDrawable();
-            orbBg.setShape(GradientDrawable.OVAL);
-            int fill = isAvailable ? (isActive ? ORB_ACTIVE : ORB_READY) : linked ? ORB_PAUSED : ORB_UNASSIGNED;
-            int stroke = isAvailable ? (isActive ? ORB_ACTIVE_BORDER : ORB_READY_BORDER)
-                    : linked ? ORB_PAUSED_BORDER : ORB_UNASSIGNED_BORDER;
-            orbBg.setColor(fill);
-            orbBg.setStroke(Math.max(1, r(1)), stroke);
-            orb.setBackground(orbBg);
-        }
-
         ImageView icon = new ImageView(this);
-        icon.setImageBitmap(assetBitmap(WatchProtocol.iconAsset(action, direction, label)));
-        tintIcon(icon);
+        Bitmap syncedIcon = controlIconBitmap(action);
+        if (syncedIcon != null) {
+            icon.setTag(Boolean.TRUE);
+            icon.clearColorFilter();
+            icon.setImageBitmap(syncedIcon);
+        } else {
+            icon.setTag(Boolean.FALSE);
+            icon.setImageBitmap(assetBitmap(WatchProtocol.iconAsset(action, direction, label)));
+            tintIcon(icon);
+        }
         icon.setAlpha(isAvailable ? 1f : 0.62f);
         orb.addView(icon, new FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER));
-        cell.addView(orb, new LinearLayout.LayoutParams(orbSize, orbSize));
+        int compactOrb = single ? orbSize : Math.min(orbSize, iconSize + r(4));
+        cell.addView(orb, new LinearLayout.LayoutParams(compactOrb, compactOrb));
 
-        TextView labelView = text(label, label336, labelRectSp, INK, true);
+        boolean isLoading = "加载中".equals(slotHint);
+        TextView labelView = text(isLoading ? "加载中" : label, label336, labelRectSp, isLoading ? MUTED : INK, !isLoading);
         labelView.setSingleLine(true);
         labelView.setEllipsize(TextUtils.TruncateAt.END);
         labelView.setGravity(Gravity.CENTER);
@@ -1204,15 +1481,15 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         labels.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-1, -2);
         if (single) {
-            int width = getResources().getDisplayMetrics().widthPixels - 2 * u(28, 12) - r(24) - orbSize;
+            int width = getResources().getDisplayMetrics().widthPixels - 2 * u(28, 12) - r(24) - compactOrb;
             labelParams.width = Math.max(0, Math.min(r(94), width));
             labelParams.setMarginStart(r(8));
         } else {
-            labelParams.topMargin = r(4);
+            labelParams.topMargin = r(2);
         }
         labels.addView(labelView);
 
-        if (!hint.isEmpty()) {
+        if (!hint.isEmpty() && !isLoading) {
             TextView hintView = text(hint, 12, 10, MUTED, false);
             hintView.setSingleLine(true);
             hintView.setGravity(Gravity.CENTER);
@@ -1760,7 +2037,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private void tintIcon(ImageView view) {
         themeStyles.bind(view, (target, palette) -> {
             ImageView image = (ImageView) target;
-            if (palette == ThemeStyles.DAY) image.setColorFilter(palette.ink());
+            if (!Boolean.TRUE.equals(image.getTag()) && palette == ThemeStyles.DAY) image.setColorFilter(palette.ink());
             else image.clearColorFilter();
         });
     }

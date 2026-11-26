@@ -6,7 +6,7 @@ import static org.junit.Assert.assertFalse;
 
 public final class LockControlTest {
     @Test public void accessoryWarningsDoNotHideAnOtherwiseRecognizedLock() {
-        for (String status : new String[]{"已驻车", "已停车", "车窗未关", "天窗未关闭", "车门未关", "后备箱未关"}) {
+        for (String status : new String[]{"已驻车", "已停车", "已插枪", "充电中", "已驻车、已插枪", "车窗未关", "天窗未关闭", "车门未关", "后备箱未关"}) {
             assertEquals(status, "", LockControl.blockedReason(true, status, "locked"));
             assertEquals(status, "", LockControl.blockedReason(true, status, "unlocked"));
         }

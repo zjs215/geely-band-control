@@ -54,5 +54,5 @@ function localMinute(now) {
 }
 
 function validMinute(value) {
-  return Number.isInteger(value) && value >= 0 && value < MINUTES_PER_DAY
+  return typeof value === 'number' && isFinite(value) && Math.floor(value) === value && value >= 0 && value < MINUTES_PER_DAY
 }

@@ -3,8 +3,8 @@
     <stack class="theme-layer">
       <image class="theme-background" if="{{ themeArt }}" src="{{ themeArt }}" @error="onThemeImageError"></image>
     </stack>
-    <div class="home-layout-pending" if="{{ !homeLayoutReady }}"><text class="home-layout-pending-text">正在载入车况…</text></div>
-    <scroll class="{{ ui.scrollPage }}" scroll-y="true" if="{{ homeLayoutReady && !settingsOpen && !useTwoPageShell }}">
+    <div class="home-layout-pending" if="{{ !homeLayoutReady }}"><text class="{{ 'home-layout-pending-text' + themeInk }}">正在载入车况…</text></div>
+    <scroll id="homeScroll" class="{{ ui.scrollPage }}" scroll-y="true" focusable="true" if="{{ homeLayoutReady && !settingsOpen && !useTwoPageShell }}">
       <div class="{{ ui.homeScreen }}">
         <div class="{{ ui.range + themePanelClass }}" @click="toggleRange">
           <div class="{{ ui.rangeHeader }}">
@@ -20,7 +20,7 @@
               </div>
             </div>
           </div>
-          <image class="{{ ui.vehicleImage }}" src="{{ displayCarImage }}" @error="onCarImageError"></image>
+          <image class="{{ ui.vehicleImage }}" src="{{ carImageSrc }}" @error="onCarImageError"></image>
           <div class="{{ ui.split }}" if="{{ showTotalRange }}">
             <div class="{{ ui.energy + themeControl }}">
               <div class="{{ ui.energyReading }}">
@@ -63,22 +63,22 @@
         <text class="{{ ui.empty + themeMuted + themeControl }}" if="{{ compatibilityNotice }}">{{ compatibilityNotice }}</text>
         <div class="{{ ui.grid }}" if="{{ !compatibilityNotice }}">
           <div class="{{ ui.controlRow }}" for="{{ displayRows }}" tid="id">
-            <div class="{{ $item.first.style + themeTileClass }}" @click="select($item.first.id)">
+            <div class="{{ $item.first.style + themeTileClass + $item.first.tileStateStyle }}" @click="select($item.first.id)">
               <div class="{{ $item.first.symbolStyle + themeTileIconClass }}">
-                <image class="{{ $item.first.iconStyle }}" src="{{ $item.first.icon }}"></image>
+                <image class="{{ $item.first.iconStyle }}" src="{{ $item.first.icon }}" @error="onControlIconError($item.first.id)"></image>
               </div>
               <div class="{{ $item.first.copyStyle }}">
-                <text class="{{ $item.first.labelStyle + themeInk }}">{{ $item.first.label }}</text>
-                <text if="{{ $item.first.hint }}" class="{{ $item.first.hintStyle + themeMuted }}">{{ $item.first.hint }}</text>
+                <text class="{{ $item.first.labelStyle + $item.first.labelToneStyle }}">{{ $item.first.displayLabel }}</text>
+                <text if="{{ $item.first.displayHint }}" class="{{ $item.first.hintStyle + themeMuted }}">{{ $item.first.displayHint }}</text>
               </div>
             </div>
-            <div if="{{ $item.second.id }}" class="{{ $item.second.style + themeTileClass }}" @click="select($item.second.id)">
+            <div if="{{ $item.second.id }}" class="{{ $item.second.style + themeTileClass + $item.second.tileStateStyle }}" @click="select($item.second.id)">
               <div class="{{ $item.second.symbolStyle + themeTileIconClass }}">
-                <image class="{{ $item.second.iconStyle }}" src="{{ $item.second.icon }}"></image>
+                <image class="{{ $item.second.iconStyle }}" src="{{ $item.second.icon }}" @error="onControlIconError($item.second.id)"></image>
               </div>
               <div class="{{ $item.second.copyStyle }}">
-                <text class="{{ $item.second.labelStyle + themeInk }}">{{ $item.second.label }}</text>
-                <text if="{{ $item.second.hint }}" class="{{ $item.second.hintStyle + themeMuted }}">{{ $item.second.hint }}</text>
+                <text class="{{ $item.second.labelStyle + $item.second.labelToneStyle }}">{{ $item.second.displayLabel }}</text>
+                <text if="{{ $item.second.displayHint }}" class="{{ $item.second.hintStyle + themeMuted }}">{{ $item.second.displayHint }}</text>
               </div>
             </div>
           </div>
@@ -89,14 +89,15 @@
     <stack class="{{ themeArt ? 'watch-shell' : 'watch-shell watch-shell-classic' }}" if="{{ homeLayoutReady && !settingsOpen && useTwoPageShell }}">
       <swiper id="watchSwiper" class="watch-swiper" vertical="true" indicator="false" loop="false" focusable="true" enableswipe="{{ !confirmTitle }}" index="{{ watchPage }}" @change="onWatchPageChange">
         <div class="{{ watchHomeUi.mileagePage + (themeArt ? '' : ' watch-mileage-page-classic') }}">
-          <div class="{{ 'watch-connection-row' + (layoutProfile === 'circle' ? ' watch-connection-row-circle' : '') }}">
+          <div class="{{ 'watch-connection-row' + (layoutProfile === 'circle' ? ' watch-connection-row-circle' : (layoutProfile === 'rect' || layoutProfile === 'square' ? ' watch-connection-row-rect' : '')) }}">
+            <text class="watch-model-top-left" if="{{ layoutProfile === 'rect' || layoutProfile === 'square' }}">{{ vehicleName }}</text>
             <div class="watch-connection" @click="refresh">
               <div class="{{ (modeLabel === '已连接' || modeLabel === '演示') ? 'dot online' : 'dot' }}"></div>
               <text class="watch-connection-text">{{ modeLabel }}</text>
             </div>
           </div>
           <div class="{{ watchHomeUi.heroHeader }}">
-            <text class="{{ watchHomeUi.model }}">{{ vehicleName }}</text>
+            <text class="{{ watchHomeUi.model }}" if="{{ layoutProfile !== 'rect' && layoutProfile !== 'square' }}">{{ vehicleName }}</text>
             <div class="watch-hero-num-row">
               <text class="{{ watchHomeUi.heroUnitGhost }}">{{ totalUnit || '\u00a0km' }}</text>
               <text class="{{ watchHomeUi.hero }}">{{ total }}</text>
@@ -114,7 +115,7 @@
               </div>
             </div>
           </div>
-          <image class="{{ watchHomeUi.car }}" src="{{ displayCarImage }}" @error="onCarImageError"></image>
+          <image class="{{ watchHomeUi.car }}" src="{{ carImageSrc }}" @error="onCarImageError"></image>
           <div class="watch-home-footer">
             <div class="watch-motion-group">
               <image class="watch-motion-icon" if="{{ motion === '已驻车' }}" src="/common/images/parking-status.png"></image>
@@ -137,22 +138,22 @@
           <text class="{{ watchControlsUi.empty + themeMuted + themeControl }}" if="{{ compatibilityNotice }}">{{ compatibilityNotice }}</text>
           <div class="{{ watchControlsUi.grid }}" if="{{ !compatibilityNotice }}" style="transform: {{ controlsPullTransform }}">
             <div class="{{ watchControlsUi.controlRow }}" for="{{ displayRows }}" tid="id">
-              <div class="{{ $item.first.watchCellStyle + themeTileClass }}" @click="select($item.first.id)">
-                <div class="{{ $item.first.watchOrbStyle + ' ' + $item.first.watchOrbSizeStyle + themeTileIconClass }}">
-                  <image class="{{ $item.first.watchOrbIconStyle }}" src="{{ $item.first.icon }}"></image>
+              <div class="{{ $item.first.watchCellStyle + themeTileClass + $item.first.watchCellStateStyle }}" @click="select($item.first.id)">
+                <div class="{{ $item.first.watchOrbStyle + ' ' + $item.first.watchOrbSizeStyle + $item.first.watchOrbDayStyle }}">
+                  <image class="{{ $item.first.watchOrbIconStyle }}" src="{{ $item.first.icon }}" @error="onControlIconError($item.first.id)"></image>
                 </div>
                 <div class="{{ $item.first.watchCellCopyStyle }}">
-                  <text class="{{ $item.first.watchCellLabelStyle + themeInk }}">{{ $item.first.label }}</text>
-                  <text if="{{ $item.first.hint }}" class="{{ 'watch-cell-hint' + themeMuted }}">{{ $item.first.hint }}</text>
+                  <text class="{{ $item.first.watchCellLabelStyle + $item.first.labelToneStyle }}">{{ $item.first.displayLabel }}</text>
+                  <text if="{{ $item.first.displayHint }}" class="{{ 'watch-cell-hint' + themeMuted }}">{{ $item.first.displayHint }}</text>
                 </div>
               </div>
-              <div if="{{ $item.second.id }}" class="{{ $item.second.watchCellStyle + themeTileClass }}" @click="select($item.second.id)">
-                <div class="{{ $item.second.watchOrbStyle + ' ' + $item.second.watchOrbSizeStyle + themeTileIconClass }}">
-                  <image class="{{ $item.second.watchOrbIconStyle }}" src="{{ $item.second.icon }}"></image>
+              <div if="{{ $item.second.id }}" class="{{ $item.second.watchCellStyle + themeTileClass + $item.second.watchCellStateStyle }}" @click="select($item.second.id)">
+                <div class="{{ $item.second.watchOrbStyle + ' ' + $item.second.watchOrbSizeStyle + $item.second.watchOrbDayStyle }}">
+                  <image class="{{ $item.second.watchOrbIconStyle }}" src="{{ $item.second.icon }}" @error="onControlIconError($item.second.id)"></image>
                 </div>
                 <div class="{{ $item.second.watchCellCopyStyle }}">
-                  <text class="{{ $item.second.watchCellLabelStyle + themeInk }}">{{ $item.second.label }}</text>
-                  <text if="{{ $item.second.hint }}" class="{{ 'watch-cell-hint' + themeMuted }}">{{ $item.second.hint }}</text>
+                  <text class="{{ $item.second.watchCellLabelStyle + $item.second.labelToneStyle }}">{{ $item.second.displayLabel }}</text>
+                  <text if="{{ $item.second.displayHint }}" class="{{ 'watch-cell-hint' + themeMuted }}">{{ $item.second.displayHint }}</text>
                 </div>
               </div>
             </div>
@@ -175,13 +176,13 @@
           <image class="{{ ui.confirmIcon }}" src="{{ themeConfirmIcon }}"></image>
           <text class="{{ ui.confirmTitle + themeInk }}">{{ confirmTitle }}</text>
         </div>
-        <div class="confirm-actions">
+        <div class="{{ ui.confirmActions }}">
           <text class="{{ ui.confirmButton }}" @click="execute">确认</text>
           <text class="{{ ui.cancelButton + themeInk + themeControl }}" @click="cancel">取消</text>
         </div>
       </div>
     </div>
-    <scroll class="{{ ui.scrollPage + ' theme-settings-scroll' + themeStage }}" scroll-y="true" if="{{ settingsOpen && !themeEditorOpen && !confirmTitle }}">
+    <scroll id="settingsScroll" class="{{ ui.scrollPage + ' theme-settings-scroll' + themeStage }}" scroll-y="true" focusable="true" if="{{ settingsOpen && !themeEditorOpen && !confirmTitle }}">
       <div class="{{ ui.settingsScreen }}">
         <text class="{{ ui.settingsTitle + themeInk }}">设置</text>
         <div class="{{ ui.diagnostics + ' theme-settings-entry' + themeControl }}" if="{{ canEditTheme }}" @click="openThemeEditor">
@@ -204,7 +205,7 @@
         <text class="{{ ui.settingsBack + themeInk + themeControl }}" @click="closeSettings">返回</text>
       </div>
     </scroll>
-    <scroll class="{{ ui.scrollPage + ' theme-settings-scroll' + themeStage }}" scroll-y="true" if="{{ themeEditorOpen && !confirmTitle }}">
+    <scroll id="themeEditorScroll" class="{{ ui.scrollPage + ' theme-settings-scroll' + themeStage }}" scroll-y="true" focusable="true" if="{{ themeEditorOpen && !confirmTitle }}">
       <div class="{{ ui.settingsScreen }}">
         <text class="{{ ui.settingsTitle + themeInk }}">外观主题</text>
         <picker class="{{ 'theme-picker' + themeControl }}" type="text" range="{{ themeNames }}" selected="{{ themeDraftChoice }}" @change="changeThemeChoice"></picker>
@@ -234,6 +235,7 @@
 import { rangeText, readSnapshot, writeSnapshot } from '../../common/snapshot.js'
 import { actionIcon } from '../../common/action-icons.js'
 import { DEFAULT_CAR_IMAGE, readCachedCarImage, saveCarImage } from '../../common/car-image.js'
+import { persistControlIconCache, readCachedControlIcons, saveControlIcon } from '../../common/control-icons.js'
 import { CLASSIC_THEME, THEME_IDS, THEME_NAMES, parseThemeStorage, readTheme, themeVariant,
   themeDelay, themeImage, themeTimeLabel } from '../../common/theme.js'
 import { DEFAULT_LAYOUT, detectDeviceProfile, layoutClasses, layoutConfig, variantClass, watchControlsClasses, watchHomeClasses } from '../../common/layout.js'
@@ -256,6 +258,7 @@ const ACTIONS = [
 ]
 const HOME_ACTIONS = 4
 const STATUS_INTERVAL_MS = 12000
+const CONNECT_WAIT_INTERVAL_MS = 400
 const CONTROL_STATUS_INTERVAL_MS = 1500
 const PHONE_CONFIRM_INTERVAL_MS = 2500
 const TOAST_DURATION_MS = 2800
@@ -275,15 +278,16 @@ const BAND_DISPLAY_FEATURE = 'band_display'
 const FAILURE_PULSE_GAP_MS = 200
 const CONTROLS_PULL_THRESHOLD = 50
 const REQUEST_FEATURES = {
-  refresh: 'refresh', prepare: 'confirm', execute: 'confirm', cancel: 'cancel', car_image: 'car_image'
+  refresh: 'refresh', prepare: 'confirm', execute: 'confirm', cancel: 'cancel', car_image: 'car_image',
+  control_icon: 'control_icons'
 }
 const WINDOW_ACTIONS = ['window_vent', 'window_open']
 const SWITCH_LABELS = { climate: '空调', heat: '升温', cool: '降温', purify: '净化', defrost: '除霜', sentry: '哨兵' }
 const DEFAULT_VEHICLE_NAME = '我的座驾'
 const NO_ACTION = {
-  id: '', label: '', style: '', icon: '', iconStyle: '', symbolStyle: '', labelStyle: '', hintStyle: '',
-  watchOrbStyle: '', watchOrbSizeStyle: '', watchOrbIconStyle: '', watchCellStyle: '',
-  watchCellLabelStyle: '', watchCellCopyStyle: '', hint: ''
+  id: '', label: '', displayLabel: '', displayHint: '', labelToneStyle: '', style: '', tileStateStyle: '', icon: '', iconStyle: '', symbolStyle: '', labelStyle: '', hintStyle: '',
+  watchOrbStyle: '', watchOrbSizeStyle: '', watchOrbDayStyle: '', watchOrbIconStyle: '', watchCellStyle: '',
+  watchCellStateStyle: '', watchCellLabelStyle: '', watchCellCopyStyle: '', hint: ''
 }
 
 function normalizeVehicleName(value) {
@@ -329,6 +333,14 @@ function exceedsReplyLimit(text) {
     if (bytes > MAX_REPLY_BYTES) return true
   }
   return false
+}
+
+function isInt(value) {
+  return typeof value === 'number' && isFinite(value) && Math.floor(value) === value
+}
+
+function isNonNegativeInt(value) {
+  return isInt(value) && value >= 0
 }
 
 function validPercent(value) {
@@ -410,7 +422,7 @@ function readControlStates(states, mapped) {
 }
 
 function actionRows(ids, available, linked, controlPending, directions, profile = DEFAULT_LAYOUT,
-  labels = {}, day = false, states = {}, shortRect = false) {
+  labels = {}, day = false, states = {}, shortRect = false, syncedIcons = null) {
   const columns = layoutConfig(profile).columns
   const watchSize = columns === 1 ? 'single' : ids.length <= 1 ? 'hero' : ids.length === 2 ? 'pair' : 'grid'
   const watchTileClass = base => base + ' ' + base + '-' + watchSize
@@ -418,18 +430,28 @@ function actionRows(ids, available, linked, controlPending, directions, profile 
   function tile(id, solo) {
     const label = labels[id] || controlLabel(id, directions[id])
     const path = actionIcon(id, directions[id], labels[id])
-    const icon = day ? path.replace('/common/images/', '/common/day-icons/') : path
+    const synced = syncedIcons && typeof syncedIcons[id] === 'string' ? syncedIcons[id] : ''
+    const icon = synced || (day ? path.replace('/common/images/', '/common/day-icons/') : path)
     const isAvailable = !states[id] && available.indexOf(id) >= 0
-    const isActive = isAvailable && (directions[id] === 'close' || (id === 'lock' && directions[id] === 'unlock'))
+    const isActive = isAvailable && (directions[id] === 'close' || (id === 'lock' && directions[id] === 'lock'))
     const size = solo ? ' full-tile' : ''
     const state = isAvailable ? 'ready' : linked ? 'paused' : 'unassigned'
+    const isLoading = states[id] === '加载中'
     let hint = ''
     if (!linked) hint = '待连接'
     else if (states[id]) hint = states[id]
     else if (!isAvailable && !controlPending) hint = '暂不可用'
+    const displayLabel = isLoading ? '加载中' : label
+    const displayHint = isLoading ? '' : hint
+    const labelToneStyle = isLoading
+      ? (day ? ' watch-cell-label-loading-day' : ' watch-cell-label-loading')
+      : (day ? ' theme-ink-day' : '')
     return {
-      id, label, icon, hint,
+      id, label, displayLabel, displayHint, labelToneStyle, icon, hint,
       style: variantClass('tile ' + state + size, profile) + (rect ? ' tile-rect' : ''),
+      tileStateStyle: day
+        ? (isAvailable ? (isActive ? ' tile-active-day' : '') : ' tile-paused-day')
+        : (isAvailable ? (isActive ? ' tile-active' : '') : ' tile-paused'),
       iconStyle: variantClass(isAvailable ? 'tile-icon' : 'tile-icon muted-icon', profile) + (rect ? ' tile-icon-rect' : ''),
       symbolStyle: variantClass(isAvailable ? 'tile-symbol symbol-ready' : 'tile-symbol', profile)
         + (rect ? ' tile-symbol-rect' : ''),
@@ -440,9 +462,15 @@ function actionRows(ids, available, linked, controlPending, directions, profile 
         ? (isActive ? 'watch-orb watch-orb-ready watch-orb-active' : 'watch-orb watch-orb-ready')
         : linked ? 'watch-orb watch-orb-paused' : 'watch-orb',
       watchOrbSizeStyle: 'watch-orb-' + watchSize,
+      watchOrbDayStyle: day
+        ? (isAvailable ? (isActive ? ' watch-orb-active-day' : ' watch-orb-ready-day') : ' watch-orb-paused-day')
+        : '',
       watchOrbIconStyle: watchTileClass('watch-orb-icon') + (isAvailable ? '' : ' muted-icon'),
       watchCellStyle: watchTileClass('watch-cell') + (rect ? ' watch-cell-rect' : '')
         + (shortRect ? ' watch-cell-rect-short' : ''),
+      watchCellStateStyle: day
+        ? (isAvailable ? (isActive ? ' watch-cell-active-day' : ' watch-cell-ready-day') : ' watch-cell-paused-day')
+        : (isAvailable ? (isActive ? ' watch-cell-active' : ' watch-cell-ready') : ' watch-cell-paused'),
       watchCellLabelStyle: watchTileClass('watch-cell-label'),
       watchCellCopyStyle: watchTileClass('watch-control-copy')
     }
@@ -502,8 +530,12 @@ export default {
     themeTimesExpanded: false,
     themeDraftDay: '06:00',
     themeDraftNight: '18:00',
-    themeNames: ['跟随手机', ...THEME_NAMES],
+    themeNames: ['跟随手机'].concat(THEME_NAMES),
     themeModes: ['自动日夜', '固定日景', '固定夜景'],
+    rangeBreakdown: [
+      { id: 'electric', value: '—\u00a0km', percent: null },
+      { id: 'fuel', value: '—\u00a0km', percent: null }
+    ],
     themeArt: '',
     themeNight: false,
     themeSummary: '跟随手机 · 经典',
@@ -532,17 +564,6 @@ export default {
     displayCarImage() {
       return this.carImageSrc || DEFAULT_CAR_IMAGE
     },
-    rangeBreakdown() {
-      const bothMissing = this.electric === '—' && this.fuel === '—'
-      const readings = []
-      if (bothMissing || this.electric !== '—') {
-        readings.push({ id: 'electric', value: this.electric + this.electricUnit, percent: this.electricPercent })
-      }
-      if (bothMissing || this.fuel !== '—') {
-        readings.push({ id: 'fuel', value: this.fuel + this.fuelUnit, percent: this.fuelPercent })
-      }
-      return readings
-    },
     themeDay() {
       return !!this.themeArt && !this.themeNight
     },
@@ -562,6 +583,7 @@ export default {
       return this.themeDay ? '/common/day-icons/' : '/common/images/'
     },
     themeConfirmIcon() {
+      if (this.confirmIcon.indexOf('internal://') === 0 || this.confirmIcon.indexOf('data:') === 0) return this.confirmIcon
       const windowGlyph = this.confirmIcon.match(/\/(window_vent|window_open)\.png$/)
       if (windowGlyph) {
         return '/common/confirm-icons/' + (this.themeDay ? 'day/' : 'night/') + windowGlyph[1] + '.png'
@@ -603,6 +625,7 @@ export default {
     this.confirmAction = ''
     this.confirmToken = ''
     this.connection = null
+    this.linkOpenState = 0
     this.linkGeneration = 0
     this.handshakeComplete = false
     this.phoneApp = ''
@@ -621,6 +644,7 @@ export default {
     this.receiptShowing = false
     this.interruptedExecution = false
     this.toastTimer = null
+    this.focusTimer = null
     this.sequence = 0
     this.ready = false
     this.visible = false
@@ -652,10 +676,21 @@ export default {
     this.carImageChecked = false
     this.cachedCarImage = null
     this.imageSync = null
+    this.controlIconHashes = {}
+    this.controlIconUris = {}
+    this.controlIconFiles = {}
+    this.controlIconOrder = []
+    this.failedControlIconHashes = {}
+    this.iconSyncQueue = []
+    this.iconSync = null
+    this.controlIconsLoading = false
     this.layoutDetected = false
     this.layoutResolved = false
     this.shortRect = false
-    this.layoutReadyTimer = setTimeout(() => { this.homeLayoutReady = true }, 650)
+    this.layoutReadyTimer = setTimeout(() => {
+      this.homeLayoutReady = true
+      this.scheduleFocusActive()
+    }, 450)
     this.localTheme = CLASSIC_THEME
     this.phoneTheme = CLASSIC_THEME
     this.followPhoneTheme = true
@@ -664,9 +699,65 @@ export default {
     this.localThemeSaved = false
     this.phoneThemeReceived = false
     this.detectLayout()
+    this.updateRangeBreakdown()
     this.loadThemes()
     this.loadSnapshot()
     this.loadCarImageCache()
+  },
+
+  loadControlIconCache() {
+    if (this.controlIconsLoading || this.destroyed) return
+    this.controlIconsLoading = true
+    readCachedControlIcons(cached => {
+      this.controlIconsLoading = false
+      if (this.destroyed) return
+      const hashes = Object.keys(cached.files)
+      for (let i = 0; i < hashes.length; i++) {
+        const hash = hashes[i]
+        if (!this.failedControlIconHashes[hash] && !this.controlIconFiles[hash]) {
+          this.controlIconFiles[hash] = cached.files[hash]
+          if (this.controlIconOrder.indexOf(hash) < 0) this.controlIconOrder.push(hash)
+        }
+      }
+      if (cached.brand === this.brand) {
+        const actions = Object.keys(cached.actions)
+        for (let i = 0; i < actions.length; i++) {
+          const action = actions[i]
+          const hash = cached.actions[action]
+          const uri = this.controlIconFiles[hash]
+          if (uri && !this.controlIconHashes[action]) {
+            this.controlIconHashes[action] = hash
+            this.controlIconUris[action] = uri
+          }
+        }
+        this.updateRows()
+      }
+    }, () => {
+      this.controlIconsLoading = false
+    })
+  },
+
+  onControlIconError(action) {
+    if (!action) return
+    const uri = this.controlIconUris[action]
+    const hash = this.controlIconHashes[action]
+    if (!uri) return
+    if (hash) {
+      this.failedControlIconHashes[hash] = true
+      delete this.controlIconFiles[hash]
+      const idx = this.controlIconOrder.indexOf(hash)
+      if (idx >= 0) this.controlIconOrder.splice(idx, 1)
+    }
+    const keys = Object.keys(this.controlIconHashes)
+    for (let i = 0; i < keys.length; i++) {
+      const id = keys[i]
+      if (this.controlIconHashes[id] === hash || id === action) {
+        delete this.controlIconHashes[id]
+        delete this.controlIconUris[id]
+      }
+    }
+    persistControlIconCache(this.brand, this.controlIconHashes, this.controlIconFiles, this.controlIconOrder)
+    this.updateRows()
   },
 
   loadCarImageCache() {
@@ -678,10 +769,12 @@ export default {
       if (this.destroyed) return
       this.cachedCarImage = { uri, hash, brand }
       this.resolveCarImageCache()
+      this.updateHomeLayoutReady()
     }, () => {
       this.carImageCacheLoading = false
       this.carImageChecked = true
       this.resolveCarImageCache()
+      this.updateHomeLayoutReady()
     })
   },
 
@@ -738,13 +831,17 @@ export default {
     this.ui = layoutClasses(next)
     this.updateRows()
     this.refreshTheme()
+    if (this.canChangeDisplay) this.loadRectTwoPageSetting()
     if (this.isTwoPageShell()) this.focusWatchSwiper()
+    else this.scheduleFocusActive()
   },
 
   updateHomeLayoutReady() {
-    if (!this.layoutResolved || (this.canChangeDisplay && !this.rectTwoPageLoaded)) return
+    if (!this.layoutResolved || !this.snapshotChecked || !this.carImageChecked
+        || (this.canChangeDisplay && !this.rectTwoPageLoaded)) return
     clearTimeout(this.layoutReadyTimer)
     this.homeLayoutReady = true
+    this.scheduleFocusActive()
   },
 
   isTwoPageShell() {
@@ -752,14 +849,38 @@ export default {
       || (this.canChangeDisplay && this.rectTwoPage)
   },
 
-  focusWatchSwiper() {
-    if (!this.isTwoPageShell() || this.confirmTitle || this.settingsOpen) return
+  focusElement(id) {
     try {
-      const swiper = this.$element && this.$element('watchSwiper')
-      if (swiper && typeof swiper.focus === 'function') swiper.focus()
+      const target = this.$element && this.$element(id)
+      if (target && typeof target.focus === 'function') {
+        target.focus({ focus: true })
+        return true
+      }
     } catch (_) {
       // Focus routing is optional across Vela hosts.
     }
+    return false
+  },
+
+  scheduleFocusActive() {
+    if (!this.visible || this.destroyed) return
+    const targetId = this.confirmTitle ? ''
+      : this.settingsOpen ? (this.themeEditorOpen ? 'themeEditorScroll' : 'settingsScroll')
+        : !this.homeLayoutReady ? ''
+          : this.isTwoPageShell() ? 'watchSwiper' : 'homeScroll'
+    clearTimeout(this.focusTimer)
+    this.focusTimer = null
+    if (!targetId) return
+    this.focusElement(targetId)
+    this.focusTimer = setTimeout(() => {
+      this.focusTimer = null
+      if (this.visible && !this.destroyed) this.focusElement(targetId)
+    }, 60)
+  },
+
+  focusWatchSwiper() {
+    if (!this.isTwoPageShell() || this.confirmTitle || this.settingsOpen || !this.homeLayoutReady) return
+    this.scheduleFocusActive()
   },
 
   onReady() {
@@ -790,6 +911,7 @@ export default {
       if (!this.visible) return
       if (!this.hasReply && this.storedSnapshot === null && !this.snapshotChecked) this.loadSnapshot()
       if (!this.carImageHash && !this.carImageSrc) this.loadCarImageCache()
+      if (!Object.keys(this.controlIconUris).length) this.loadControlIconCache()
       this.loadEventLog()
       this.loadHapticsSetting()
       this.loadRectTwoPageSetting()
@@ -805,7 +927,8 @@ export default {
     this.pollTimer = setTimeout(() => {
       this.pollTimer = null
       this.syncStatus()
-    }, this.phoneConfirmation ? PHONE_CONFIRM_INTERVAL_MS
+    }, !this.handshakeComplete ? CONNECT_WAIT_INTERVAL_MS
+      : this.phoneConfirmation ? PHONE_CONFIRM_INTERVAL_MS
       : this.controlPending ? CONTROL_STATUS_INTERVAL_MS : STATUS_INTERVAL_MS)
   },
 
@@ -823,7 +946,7 @@ export default {
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null
       this.syncStatus()
-    }, attempt === 0 ? 0 : 1000 * 2 ** (attempt - 1))
+    }, attempt === 0 ? 0 : 1000 * Math.pow(2, attempt - 1))
   },
 
   loadSnapshot() {
@@ -847,9 +970,13 @@ export default {
       this.mapped = knownActions(snapshot.mapped).slice(0, HOME_ACTIONS)
       this.lynkControlLabels = readLynkControlLabels(this.brand, snapshot.controlLabels, this.mapped)
       this.updateRows()
+      this.snapshotChecked = true
+      this.resolveCarImageCache()
+      this.updateHomeLayoutReady()
     }, () => {
       this.snapshotChecked = true
       this.resolveCarImageCache()
+      this.updateHomeLayoutReady()
     })
   },
 
@@ -920,11 +1047,12 @@ export default {
     this.clearControlsPull()
     this.settingsOpen = true
     this.updateDiagnosticLines()
+    this.scheduleFocusActive()
   },
 
   closeSettings() {
     this.settingsOpen = false
-    this.focusWatchSwiper()
+    this.scheduleFocusActive()
   },
 
   loadThemes() {
@@ -1004,22 +1132,24 @@ export default {
     this.themeDraftNight = themeTimeLabel(this.localTheme.nightStartMinute)
     this.themeEditorError = ''
     this.themeEditorOpen = true
+    this.scheduleFocusActive()
   },
 
   closeThemeEditor() {
     this.themeEditorOpen = false
+    this.scheduleFocusActive()
   },
 
   changeThemeChoice(event) {
     const index = Number(event.newSelected)
-    if (Number.isInteger(index) && index >= 0 && index <= THEME_IDS.length) this.themeDraftChoice = index
+    if (isInt(index) && index >= 0 && index <= THEME_IDS.length) this.themeDraftChoice = index
     this.themeTimesExpanded = false
     this.themeEditorError = ''
   },
 
   changeThemeMode(event) {
     const index = Number(event.newSelected)
-    if (Number.isInteger(index) && index >= 0 && index < this.themeModes.length) this.themeDraftMode = index
+    if (isInt(index) && index >= 0 && index < this.themeModes.length) this.themeDraftMode = index
     this.themeTimesExpanded = false
     this.themeEditorError = ''
   },
@@ -1039,7 +1169,7 @@ export default {
   changeThemeTime(event, field) {
     const hour = Number(event.hour)
     const minute = Number(event.minute)
-    if (Number.isInteger(hour) && hour >= 0 && hour < 24 && Number.isInteger(minute) && minute >= 0 && minute < 60) {
+    if (isInt(hour) && hour >= 0 && hour < 24 && isInt(minute) && minute >= 0 && minute < 60) {
       this[field] = themeTimeLabel(hour * 60 + minute)
       this.themeEditorError = ''
     }
@@ -1101,7 +1231,7 @@ export default {
       clearTimeout(this.rectDisplayTimer)
       this.rectDisplayTimer = null
       const saved = parseThemeStorage(value)
-      if (saved && typeof saved.twoPage === 'boolean' && Number.isSafeInteger(saved.revision) && saved.revision >= 0) {
+      if (saved && typeof saved.twoPage === 'boolean' && isNonNegativeInt(saved.revision)) {
         this.displayRevision = saved.revision
         this.displayPending = saved.pending === true
         this.applyTwoPage(saved.twoPage)
@@ -1115,9 +1245,10 @@ export default {
       if (deferred) this.receiveBandDisplay(deferred)
       this.updateHomeLayoutReady()
     }
-    this.rectDisplayTimer = setTimeout(() => loaded(''), 400)
+    this.rectDisplayTimer = setTimeout(() => loaded(''), 300)
     try {
-      this.eventStorage.get({ key: RECT_TWO_PAGE_KEY, success: loaded, fail: () => loaded('') })
+      const storage = this.eventStorage || require('@system.storage')
+      storage.get({ key: RECT_TWO_PAGE_KEY, success: loaded, fail: () => loaded('') })
     } catch (_) {
       loaded('')
     }
@@ -1146,6 +1277,7 @@ export default {
     }
     this.updateRows()
     if (this.isTwoPageShell()) this.focusWatchSwiper()
+    else this.scheduleFocusActive()
   },
 
   saveBandDisplay() {
@@ -1153,7 +1285,7 @@ export default {
   },
 
   receiveBandDisplay(value, sent) {
-    if (!value || typeof value.twoPage !== 'boolean' || !Number.isSafeInteger(value.revision) || value.revision < 0) return
+    if (!value || typeof value.twoPage !== 'boolean' || !isNonNegativeInt(value.revision)) return
     if (!this.rectTwoPageLoaded) {
       this.deferredDisplay = value
       return
@@ -1217,6 +1349,8 @@ export default {
 
   stopSession() {
     this.clearControlsPull()
+    clearTimeout(this.focusTimer)
+    this.focusTimer = null
     clearTimeout(this.themeTimer)
     this.themeTimer = null
     if (!this.visible) return
@@ -1232,6 +1366,8 @@ export default {
 
   onDestroy() {
     this.destroyed = true
+    clearTimeout(this.focusTimer)
+    this.focusTimer = null
     clearTimeout(this.layoutReadyTimer)
     clearTimeout(this.rectDisplayTimer)
     this.stopSession()
@@ -1280,12 +1416,15 @@ export default {
           if (message) this.receive(message.data)
         }
         connection.onclose = () => {
+          this.linkOpenState = 0
           if (this.visible) this.disconnect('手机连接已断开', 'closed')
         }
         connection.onerror = () => {
+          this.linkOpenState = 0
           if (this.visible) this.disconnect('请检查手机上的手环通信服务', 'link_error')
         }
         connection.onopen = () => {
+          this.linkOpenState = 1
           if (!this.visible || this.pending || this.confirmTitle) return
           this.cancelReconnect()
           if (this.handshakeComplete) this.syncStatus()
@@ -1293,6 +1432,7 @@ export default {
         }
       } catch (error) {
         this.connection = null
+        this.linkOpenState = 0
         console.warn('腕上银河通信初始化失败', error && error.message)
         if (manual || !this.reportedLinkIssue) {
           this.reportedLinkIssue = true
@@ -1313,7 +1453,21 @@ export default {
       try {
         connection.getReadyState({
           success: state => {
-            if (this.openTimer === timer && state && state.status === 1) this.startHello()
+            if (this.openTimer !== timer) return
+            const status = state && typeof state.status === 'number' ? state.status : null
+            if (status === 1) {
+              this.linkOpenState = 1
+              this.startHello()
+            } else if (status !== null) {
+              this.linkOpenState = status
+              clearTimeout(this.openTimer)
+              this.openTimer = null
+              if (manual) this.showToast('请先确认手机已连接手环')
+              else this.scheduleStatus()
+            }
+          },
+          fail: () => {
+            if (this.openTimer === timer) this.startHello()
           }
         })
       } catch (_) {
@@ -1391,6 +1545,7 @@ export default {
         this.clearControlsPull()
         this.vibrateShort()
       }
+      this.focusWatchSwiper()
     }
   },
 
@@ -1529,6 +1684,7 @@ export default {
     this.confirmIcon = ''
     this.confirmAction = ''
     this.confirmToken = ''
+    this.scheduleFocusActive()
   },
 
   request(type, action, token) {
@@ -1539,8 +1695,8 @@ export default {
       if (type === 'prepare' || type === 'execute') this.vibrateFailure()
       return
     }
-    if (this.pending && (this.pending.type !== 'status' && this.pending.type !== 'car_image'
-        || type === 'status' || type === 'car_image')) return
+    if (this.pending && ((this.pending.type !== 'status' && this.pending.type !== 'car_image' && this.pending.type !== 'control_icon')
+        || type === 'status' || type === 'car_image' || type === 'control_icon')) return
     if (this.pending) this.clearRequest()
     clearTimeout(this.pollTimer)
     this.pollTimer = null
@@ -1554,9 +1710,16 @@ export default {
         && this.features && this.features.includes(BAND_DISPLAY_FEATURE)) {
       request.bandDisplay = { twoPage: this.rectTwoPage, revision: this.displayRevision }
     }
+    if (type === 'status' && this.supportsRequest('control_icon')) {
+      request.themeDay = this.themeDay
+    }
     if (type === 'car_image' && this.imageSync) {
       request.hash = this.imageSync.hash
       request.index = this.imageSync.chunks.length
+    }
+    if (type === 'control_icon' && this.iconSync) {
+      request.hash = this.iconSync.hash
+      request.index = this.iconSync.chunks.length
     }
     if (action) request.action = action
     if (token) request.token = token
@@ -1565,7 +1728,7 @@ export default {
       request.brand = this.brand
       if (this.controlDirections[action]) request.controlDirection = this.controlDirections[action]
     }
-    this.busy = type !== 'status' && type !== 'car_image'
+    this.busy = type !== 'status' && type !== 'car_image' && type !== 'control_icon'
     this.refreshing = type === 'refresh'
     this.pending = request
     this.requestTimer = setTimeout(() => {
@@ -1587,7 +1750,8 @@ export default {
       failed = true
       this.recordEvent('send_failed', request)
       if (request.type === 'hello') {
-        this.finishHello()
+        if (this.linkOpenState === 1) this.finishHello()
+        else this.disconnect('', 'connect_wait', request)
       } else if (!retried && (request.type === 'status' || request.type === 'refresh')) {
         this.retryTimer = setTimeout(() => {
           this.retryTimer = null
@@ -1634,6 +1798,11 @@ export default {
     this.imageSync = null
     this.carImageHash = ''
     this.carImageSrc = brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+    this.controlIconHashes = {}
+    this.controlIconUris = {}
+    this.failedControlIconHashes = {}
+    this.iconSyncQueue = []
+    this.iconSync = null
     this.storedSnapshot = null
     writeSnapshot("", () => {})
     this.vehicleName = DEFAULT_VEHICLE_NAME
@@ -1716,6 +1885,51 @@ export default {
         this.carImageSrc = uri
         this.carImageFromCache = false
       }, imageBrand)
+      if (this.startNextControlIconSync()) return
+      this.scheduleStatus()
+      return
+    }
+    if (request.type === 'control_icon') {
+      if (reply.v !== PROTOCOL || reply.type !== 'control_icon_reply') return
+      this.clearRequest()
+      if (!this.iconSync || reply.hash !== this.iconSync.hash || reply.index !== this.iconSync.chunks.length
+          || typeof reply.total !== 'number' || reply.total <= 0 || typeof reply.data !== 'string' || !reply.data) {
+        this.iconSync = null
+        if (this.startNextControlIconSync()) return
+        this.scheduleStatus()
+        return
+      }
+      this.iconSync.chunks.push(reply.data)
+      if (this.iconSync.chunks.length < reply.total) {
+        this.request('control_icon')
+        return
+      }
+      const completedHash = this.iconSync.hash
+      const base64Text = this.iconSync.chunks.join('')
+      this.iconSync = null
+      const iconBrand = this.brand
+      saveControlIcon(completedHash, base64Text, {
+        brand: iconBrand,
+        actions: this.controlIconHashes,
+        files: this.controlIconFiles,
+        order: this.controlIconOrder
+      }, (uri, savedHash) => {
+        if (this.destroyed || iconBrand !== this.brand) return
+        this.controlIconFiles[savedHash] = uri
+        let updated = false
+        for (let i = 0; i < this.mapped.length; i++) {
+          const id = this.mapped[i]
+          if (this.controlIconHashes[id] === savedHash || (this.iconSyncTargets && this.iconSyncTargets[id] === savedHash)) {
+            this.controlIconHashes[id] = savedHash
+            this.controlIconUris[id] = uri
+            if (this.confirmTitle && this.confirmAction === id) this.confirmIcon = uri
+            updated = true
+          }
+        }
+        persistControlIconCache(this.brand, this.controlIconHashes, this.controlIconFiles, this.controlIconOrder)
+        if (updated) this.updateRows()
+      })
+      if (this.startNextControlIconSync()) return
       this.scheduleStatus()
       return
     }
@@ -1761,6 +1975,7 @@ export default {
     this.controlDirections = this.controlPending && !firstReply && !cachedVehicle
       ? Object.assign({}, this.controlDirections, directions) : directions
     this.emptyLabel = '请在手机配置' + this.brandName() + '卡片'
+    this.syncActionIconMetadata(reply.actionIcons)
     this.updateRows()
     if (typeof reply.vehicleName === 'string') {
       this.vehicleName = normalizeVehicleName(reply.vehicleName)
@@ -1795,7 +2010,7 @@ export default {
       this.clearToast()
       this.confirmAction = request.action
       this.confirmToken = reply.token
-      this.confirmIcon = actionIcon(request.action, directions[request.action], this.lynkControlLabels[request.action])
+      this.confirmIcon = this.controlIconUris[request.action] || actionIcon(request.action, directions[request.action], this.lynkControlLabels[request.action])
       this.confirmTitle = reply.message
       this.confirmTimer = setTimeout(() => {
         this.cancel()
@@ -1832,7 +2047,57 @@ export default {
       this.request('car_image')
       return
     }
+    if (request.type === 'status' && this.supportsRequest('control_icon') && !this.controlPending && !this.confirmTitle
+        && this.startNextControlIconSync()) {
+      return
+    }
     this.scheduleStatus()
+  },
+
+  syncActionIconMetadata(rawIcons) {
+    if (!rawIcons || typeof rawIcons !== 'object' || Array.isArray(rawIcons)) return
+    if (!this.iconSyncTargets) this.iconSyncTargets = {}
+    const queue = []
+    const seenHashes = {}
+    let cacheUpdated = false
+    for (let i = 0; i < this.mapped.length; i++) {
+      const action = this.mapped[i]
+      const entry = rawIcons[action]
+      if (!Array.isArray(entry) || typeof entry[0] !== 'string' || typeof entry[1] !== 'number') continue
+      const hash = entry[0]
+      const chunks = entry[1]
+      if (!hash || chunks <= 0) continue
+      this.iconSyncTargets[action] = hash
+      const cachedUri = this.controlIconFiles[hash]
+      if (cachedUri) {
+        if (this.controlIconHashes[action] !== hash || this.controlIconUris[action] !== cachedUri) {
+          this.controlIconHashes[action] = hash
+          this.controlIconUris[action] = cachedUri
+          cacheUpdated = true
+        }
+      } else if (!this.failedControlIconHashes[hash] && !seenHashes[hash]) {
+        seenHashes[hash] = true
+        queue.push({ action, hash, total: chunks, chunks: [] })
+      }
+    }
+    if (cacheUpdated) {
+      persistControlIconCache(this.brand, this.controlIconHashes, this.controlIconFiles, this.controlIconOrder)
+    }
+    if (queue.length > 0 || !this.iconSync) {
+      this.iconSyncQueue = queue
+    }
+  },
+
+  startNextControlIconSync() {
+    if (!this.visible || !this.linked || !this.supportsRequest('control_icon') || this.iconSync) return false
+    while (this.iconSyncQueue && this.iconSyncQueue.length > 0) {
+      const next = this.iconSyncQueue.shift()
+      if (!next || !next.hash || this.controlIconFiles[next.hash] || this.failedControlIconHashes[next.hash]) continue
+      this.iconSync = next
+      this.request('control_icon')
+      return true
+    }
+    return false
   },
 
   showVehicle(data, cached) {
@@ -1851,18 +2116,33 @@ export default {
     this.motion = this.brand === 'LYNKCO' && ['', '状态未知', '未知', '--', '—'].includes(motion)
       ? '' : motion || '状态未知'
     this.updated = data.updatedLabel ? (cached ? '上次 ' : '') + data.updatedLabel : '等待车况'
+    this.updateRangeBreakdown()
+  },
+
+  updateRangeBreakdown() {
+    const bothMissing = this.electric === '—' && this.fuel === '—'
+    const readings = []
+    if (bothMissing || this.electric !== '—') {
+      readings.push({ id: 'electric', value: this.electric + this.electricUnit, percent: this.electricPercent })
+    }
+    if (bothMissing || this.fuel !== '—') {
+      readings.push({ id: 'fuel', value: this.fuel + this.fuelUnit, percent: this.fuelPercent })
+    }
+    this.rangeBreakdown = readings
   },
 
   updateRows() {
     const key = [this.layoutProfile, this.shortRect, this.linked, this.mapped.join(), this.available.join(), this.controlPending, this.themeDay,
       this.mapped.map(action => this.controlDirections[action] || '').join(),
       this.mapped.map(action => this.lynkControlLabels[action] || '').join(),
-      this.mapped.map(action => this.controlStates[action] || '').join()].join('|')
+      this.mapped.map(action => this.controlStates[action] || '').join(),
+      this.mapped.map(action => this.controlIconUris[action] || '').join()].join('|')
     if (key === this.rowsKey) return
     this.rowsKey = key
     this.displayRows = actionRows(
       this.mapped, this.available, this.linked, this.controlPending, this.controlDirections,
-      this.layoutProfile, this.lynkControlLabels, this.themeDay, this.controlStates, this.shortRect)
+      this.layoutProfile, this.lynkControlLabels, this.themeDay, this.controlStates, this.shortRect,
+      this.controlIconUris)
   },
 
   clearRequest() {
@@ -1885,9 +2165,12 @@ export default {
     this.clearRequest()
     this.clearConfirmation()
     this.imageSync = null
+    this.iconSync = null
+    this.iconSyncQueue = []
     this.linkGeneration += 1
     clearTimeout(this.openTimer)
     this.openTimer = null
+    if (!replyError) this.linkOpenState = 0
     this.handshakeComplete = false
     this.phoneApp = ''
     this.protocol = null
@@ -1908,7 +2191,7 @@ export default {
     this.updateRows()
     if (!this.visible && waitingForControl) this.interruptedExecution = true
     if (controlInterrupted && !waitingForControl && reason !== 'hidden') this.vibrateFailure()
-    if (report && this.visible) {
+    if (report && this.visible && (message || waitingForControl)) {
       this.reportedLinkIssue = true
       if (waitingForControl) this.showExecutionReceipt('unknown', replyError ? message : '')
       else if (!this.receiptShowing) this.showToast(message)
@@ -1928,17 +2211,16 @@ export default {
 }
 .home-layout-pending,
 .confirm-overlay {
-  position: absolute;
-  left: 0;
-  top: 0;
   width: 100%;
   height: 100%;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 .home-layout-pending-text {
   color: #ebf2fc;
-  font-size: 18px;
+  font-size: 20px;
+  text-align: center;
 }
 .confirm-overlay {
   background-color: rgba(7, 13, 25, 0.38);
@@ -2019,7 +2301,7 @@ export default {
 }
 .range {
   width: 300px;
-  height: 182px;
+  height: 187px;
   padding: 10px 12px 7px;
   border-radius: 22px;
   background-color: #18262c;
@@ -2029,14 +2311,14 @@ export default {
 }
 .range-header {
   width: 276px;
-  height: 25px;
+  height: 36px;
   padding: 0 2px;
   align-items: center;
   justify-content: space-between;
 }
 .model {
   color: #e1edec;
-  font-size: 19px;
+  font-size: 26px;
   font-weight: bold;
   lines: 1;
   text-overflow: ellipsis;
@@ -2153,8 +2435,7 @@ export default {
   height: 97px;
   padding: 4px 9px;
   border-radius: 18px;
-  border-width: 1px;
-  border-color: #416070;
+  border-width: 0px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
@@ -2177,12 +2458,12 @@ export default {
   height: 38px;
   margin-bottom: 3px;
   border-radius: 12px;
-  background-color: #2c3c44;
+  background-color: rgba(0, 0, 0, 0);
   align-items: center;
   justify-content: center;
 }
 .symbol-ready {
-  background-color: #305248;
+  background-color: rgba(0, 0, 0, 0);
 }
 .tile-icon {
   width: 27px;
@@ -2321,29 +2602,29 @@ export default {
   text-align: center;
 }
 .confirmation {
-  width: 270px;
-  padding: 14px;
-  border-radius: 22px;
+  width: 288px;
+  padding: 16px;
+  border-radius: 24px;
   background-color: #293d56;
   flex-direction: column;
   align-items: center;
 }
 .confirm-action {
   width: 100%;
-  min-height: 50px;
+  min-height: 52px;
   align-items: center;
   justify-content: center;
 }
 .confirm-icon {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   margin-right: 10px;
   object-fit: contain;
 }
 .confirm-title {
   max-width: 76%;
   color: #f4faf8;
-  font-size: 21px;
+  font-size: 22px;
   font-weight: bold;
   text-align: center;
   lines: 2;
@@ -2351,14 +2632,14 @@ export default {
 }
 .confirm-actions {
   width: 100%;
-  margin-top: 10px;
-  justify-content: space-between;
+  margin-top: 16px;
+  flex-direction: column;
 }
 .confirm-button, .cancel-button {
-  width: 48%;
-  height: 50px;
-  border-radius: 13px;
-  font-size: 17px;
+  width: 100%;
+  height: 64px;
+  border-radius: 18px;
+  font-size: 23px;
   text-align: center;
 }
 .confirm-button {
@@ -2367,6 +2648,7 @@ export default {
   font-weight: bold;
 }
 .cancel-button {
+  margin-top: 16px;
   color: #e7f3f2;
   background-color: #394f69;
 }
@@ -2577,10 +2859,19 @@ export default {
 .confirm-title-capsule {
   font-size: 30px;
 }
+.confirm-actions-capsule {
+  margin-top: 14px;
+  flex-direction: row;
+  justify-content: space-between;
+}
 .confirm-button-capsule, .cancel-button-capsule {
+  width: 48%;
   height: 76px;
   border-radius: 20px;
   font-size: 25px;
+}
+.cancel-button-capsule {
+  margin-top: 0;
 }
 .settings-screen-capsule {
   width: 336px;
@@ -2819,54 +3110,65 @@ export default {
 .confirm-title-circle {
   font-size: 21px;
 }
+.confirm-actions-circle {
+  margin-top: 10px;
+  flex-direction: row;
+  justify-content: space-between;
+}
 .confirm-button-circle, .cancel-button-circle {
+  width: 48%;
   height: 50px;
+  border-radius: 13px;
+  font-size: 17px;
+}
+.cancel-button-circle {
+  margin-top: 0;
 }
 .settings-screen-circle {
   width: 336px;
-  padding: 52px 50px 54px;
+  padding: 54px 44px 56px;
   align-items: center;
 }
 .settings-title-circle {
-  width: 236px;
-  font-size: 21px;
+  width: 248px;
+  font-size: 26px;
   margin-bottom: 12px;
 }
 .haptics-setting-circle {
-  width: 236px;
-  height: 44px;
-  padding: 0 10px;
-  margin-bottom: 10px;
-  border-radius: 12px;
+  width: 248px;
+  height: 54px;
+  padding: 0 12px;
+  margin-bottom: 12px;
+  border-radius: 14px;
 }
 .haptics-label-circle {
-  font-size: 15px;
+  font-size: 21px;
 }
 .haptics-switch-circle {
-  width: 48px;
+  width: 56px;
 }
 .diagnostics-circle {
-  width: 236px;
-  padding: 10px;
-  border-radius: 12px;
+  width: 248px;
+  padding: 12px;
+  border-radius: 14px;
 }
 .diagnostics-title-circle {
-  font-size: 14px;
-  margin-bottom: 5px;
+  font-size: 20px;
+  margin-bottom: 6px;
 }
 .diagnostics-line-circle {
-  width: 216px;
-  min-height: 32px;
-  margin-bottom: 4px;
-  font-size: 12px;
-  line-height: 15px;
+  width: 224px;
+  min-height: 40px;
+  margin-bottom: 6px;
+  font-size: 16px;
+  line-height: 21px;
 }
 .settings-back-circle {
-  width: 236px;
-  height: 40px;
-  margin-top: 10px;
-  border-radius: 12px;
-  font-size: 15px;
+  width: 248px;
+  height: 48px;
+  margin-top: 12px;
+  border-radius: 14px;
+  font-size: 20px;
 }
 .watch-shell {
   width: 100%;
@@ -2891,7 +3193,6 @@ export default {
 }
 .watch-mileage-page-classic {
   background-color: #000000;
-  background: linear-gradient(to bottom, #13387a 0%, #0b214d 36%, #030812 68%, #000000 88%, #000000 100%);
 }
 .watch-mileage-page-compact {
   padding: 13px 12px 6px;
@@ -3006,7 +3307,27 @@ export default {
   padding-right: 6px;
 }
 .watch-connection-row-circle {
-  padding-right: 76px;
+  justify-content: center;
+  padding-right: 0px;
+}
+.watch-connection-row-rect {
+  height: 44px;
+  margin-bottom: 4px;
+  padding-right: 0px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+.watch-model-top-left {
+  flex: 1;
+  height: 40px;
+  margin-right: 10px;
+  color: #eef4ff;
+  font-size: 32px;
+  font-weight: bold;
+  text-align: left;
+  lines: 1;
+  text-overflow: ellipsis;
 }
 .watch-connection {
   height: 24px;
@@ -3043,12 +3364,11 @@ export default {
   height: 126px;
 }
 .watch-controls-page {
-  padding: 15px 30px 15px;
+  padding: 16px 36px 16px;
   justify-content: space-between;
 }
 .watch-controls-page-classic {
   background-color: #0a101b;
-  background: linear-gradient(to bottom, #0d1626 0%, #132138 50%, #080d16 100%);
 }
 .watch-top-pill {
   height: 26px;
@@ -3077,13 +3397,13 @@ export default {
   background-color: #d8ebff;
 }
 .watch-grid {
-  width: 272px;
+  width: 248px;
   flex-direction: column;
   align-items: center;
   justify-content: center;
 }
 .watch-control-row {
-  width: 272px;
+  width: 248px;
   margin-top: 8px;
   justify-content: space-around;
 }
@@ -3092,9 +3412,8 @@ export default {
   align-items: center;
   justify-content: center;
   border-radius: 14px;
-  border-width: 1px;
-  border-color: #416070;
-  padding: 3px 4px;
+  border-width: 0px;
+  padding: 2px 4px;
   background-color: #182536;
 }
 .watch-control-copy {
@@ -3103,85 +3422,94 @@ export default {
   justify-content: center;
 }
 .watch-cell-hero {
-  width: 180px;
+  width: 156px;
+  height: 102px;
 }
 .watch-cell-pair {
-  width: 132px;
-  min-height: 116px;
+  width: 118px;
+  height: 86px;
 }
 .watch-cell-grid {
-  width: 132px;
-  min-height: 104px;
+  width: 116px;
+  height: 76px;
 }
 .watch-orb {
-  border-width: 1px;
-  border-color: #1e2a3b;
-  background-color: #121a26;
+  border-width: 0px;
+  background-color: rgba(0, 0, 0, 0);
   align-items: center;
   justify-content: center;
 }
 .watch-orb-hero {
-  width: 110px;
-  height: 110px;
-  border-radius: 55px;
+  width: 62px;
+  height: 62px;
+  border-radius: 31px;
 }
 .watch-orb-pair {
-  width: 92px;
-  height: 92px;
-  border-radius: 46px;
+  width: 48px;
+  height: 48px;
+  border-radius: 24px;
 }
 .watch-orb-grid {
-  width: 72px;
-  height: 72px;
-  border-radius: 36px;
+  width: 40px;
+  height: 40px;
+  border-radius: 20px;
 }
-.watch-orb-paused {
-  border-color: #213044;
-  background-color: #141d2b;
-}
-.watch-orb-ready {
-  border-color: #324969;
-  background-color: #1d2a3d;
-}
-.watch-orb-active {
-  border-color: #4f92ff;
-  background-color: #1862e8;
+.watch-orb-paused,
+.watch-orb-ready,
+.watch-orb-active,
+.watch-orb-paused-day,
+.watch-orb-ready-day,
+.watch-orb-active-day {
+  border-width: 0px;
+  background-color: rgba(0, 0, 0, 0);
 }
 .watch-orb-icon {
   object-fit: contain;
 }
 .watch-orb-icon-hero {
-  width: 74px;
-  height: 74px;
+  width: 60px;
+  height: 60px;
 }
 .watch-orb-icon-pair {
-  width: 62px;
-  height: 62px;
+  width: 46px;
+  height: 46px;
 }
 .watch-orb-icon-grid {
-  width: 48px;
-  height: 48px;
+  width: 38px;
+  height: 38px;
 }
 .watch-cell-label {
-  margin-top: 4px;
+  margin-top: 2px;
   color: #f4f8ff;
   font-weight: bold;
   text-align: center;
   lines: 1;
 }
 .watch-cell-label-hero {
-  font-size: 20px;
+  font-size: 18px;
+  line-height: 20px;
 }
 .watch-cell-label-pair {
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 18px;
 }
 .watch-cell-label-grid {
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 16px;
+}
+.watch-cell-label-loading {
+  color: #8ca1bc;
+  font-weight: normal;
+}
+.watch-cell-label-loading-day {
+  color: #415b6c;
+  font-weight: normal;
 }
 .watch-cell-hint {
   color: #8ca1bc;
-  font-size: 12px;
-  line-height: 14px;
+  font-size: 11px;
+  line-height: 12px;
+  margin-top: 1px;
   text-align: center;
   lines: 1;
 }
@@ -3195,10 +3523,10 @@ export default {
   text-align: center;
 }
 .watch-settings-pill {
-  width: 128px;
-  height: 42px;
-  padding: 0 14px;
-  border-radius: 21px;
+  width: 112px;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 18px;
   background-color: #152236;
   align-items: center;
   justify-content: center;
@@ -3279,9 +3607,9 @@ export default {
   width: 300px;
 }
 .watch-model-tall {
-  height: 30px;
-  max-width: 280px;
-  font-size: 22px;
+  height: 36px;
+  max-width: 300px;
+  font-size: 27px;
 }
 .watch-hero-tall {
   font-size: 54px;
@@ -3382,9 +3710,6 @@ export default {
   top: 226px;
 }
 .theme-layer, .theme-background {
-  position: absolute;
-  top: 0;
-  left: 0;
   width: 100%;
   height: 100%;
 }
@@ -3413,6 +3738,46 @@ export default {
 }
 .theme-tile-icon {
   background-color: rgba(0, 0, 0, 0);
+}
+.watch-cell-paused {
+  border-width: 0px;
+  background-color: rgba(18, 28, 42, 0.56);
+}
+.watch-cell-ready {
+  border-width: 0px;
+  background-color: rgba(29, 44, 67, 0.72);
+}
+.watch-cell-active {
+  border-width: 0px;
+  background-color: rgba(24, 98, 232, 0.62);
+}
+.watch-cell-paused-day {
+  border-width: 0px;
+  background-color: rgba(224, 234, 242, 0.48);
+}
+.watch-cell-ready-day {
+  border-width: 0px;
+  background-color: rgba(243, 248, 252, 0.76);
+}
+.watch-cell-active-day {
+  border-width: 0px;
+  background-color: rgba(142, 197, 255, 0.88);
+}
+.tile-paused {
+  border-width: 0px;
+  background-color: rgba(20, 30, 42, 0.55);
+}
+.tile-active {
+  border-width: 0px;
+  background-color: rgba(24, 98, 232, 0.58);
+}
+.tile-paused-day {
+  border-width: 0px;
+  background-color: rgba(224, 234, 242, 0.45);
+}
+.tile-active-day {
+  border-width: 0px;
+  background-color: rgba(142, 197, 255, 0.86);
 }
 .range-summary {
   width: 100%;

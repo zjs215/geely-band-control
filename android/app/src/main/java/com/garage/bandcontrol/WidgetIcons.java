@@ -84,8 +84,10 @@ final class WidgetIcons {
 
     private void addDirectionalVariants(List<Icon> icons, Resources resources, CarAction action, String name) {
         add(icons, resources, new Match(action, "", ControlDirection.OPEN),
-                name + "_off_black", name + "_off_white");
-        add(icons, resources, new Match(action, "", ControlDirection.CLOSE), name + "_on");
+                name + "_off_black", name + "_off_white", name + "_off");
+        add(icons, resources, new Match(action, "", ControlDirection.CLOSE),
+                name + "_on", name + "_on_black", name + "_on_white",
+                name + "_open", name + "_opened", name + "_open_black", name + "_open_white");
     }
 
     @SuppressLint("DiscouragedApi")

@@ -37,7 +37,7 @@ final class CarImage {
         Bitmap source = captureSource(view);
         if (source == null) return null;
         try {
-            Bitmap cropped = trimTransparent(source);
+            Bitmap cropped = trimTransparent(source, 24, 12);
             Bitmap subject = cropped != null ? cropped : source;
             try {
                 if (!hasVisibleDetail(subject)) return null;
@@ -67,6 +67,10 @@ final class CarImage {
     }
 
     static Packaged packagePng(byte[] pngBytes) {
+        return packagePng(pngBytes, MAX_CHUNKS);
+    }
+
+    static Packaged packagePng(byte[] pngBytes, int maxChunks) {
         if (pngBytes == null || pngBytes.length == 0) return null;
         String base64 = Base64.getEncoder().encodeToString(pngBytes);
         if (base64.isEmpty()) return null;
@@ -74,7 +78,7 @@ final class CarImage {
         for (int i = 0; i < base64.length(); i += CHUNK_CHARS) {
             chunks.add(base64.substring(i, Math.min(base64.length(), i + CHUNK_CHARS)));
         }
-        if (chunks.size() > MAX_CHUNKS) return null;
+        if (chunks.size() > maxChunks) return null;
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256").digest(pngBytes);
             String hash = Base64.getUrlEncoder().withoutPadding().encodeToString(digest).substring(0, 12);
@@ -84,8 +88,9 @@ final class CarImage {
         }
     }
 
-    private static Bitmap captureSource(View view) {
+    static Bitmap captureSource(View view) {
         if (view instanceof ImageView imageView && imageView.getBackground() == null
+                && imageView.getImageTintList() == null && imageView.getColorFilter() == null
                 && imageView.getDrawable() instanceof BitmapDrawable drawable) {
             Bitmap raw = drawable.getBitmap();
             ImageView.ScaleType scaleType = imageView.getScaleType();
@@ -108,7 +113,7 @@ final class CarImage {
         return bitmap;
     }
 
-    private static Bitmap trimTransparent(Bitmap source) {
+    static Bitmap trimTransparent(Bitmap source, int minWidth, int minHeight) {
         int w = source.getWidth();
         int h = source.getHeight();
         int[] row = new int[w];
@@ -134,11 +139,11 @@ final class CarImage {
         int bottom = Math.min(h, maxY + 3);
         int cropW = right - left;
         int cropH = bottom - top;
-        if (cropW < 24 || cropH < 12 || (cropW == w && cropH == h)) return null;
+        if (cropW < minWidth || cropH < minHeight || (cropW == w && cropH == h)) return null;
         return Bitmap.createBitmap(source, left, top, cropW, cropH);
     }
 
-    private static Bitmap scaleDown(Bitmap source, int maxWidth, int maxHeight) {
+    static Bitmap scaleDown(Bitmap source, int maxWidth, int maxHeight) {
         int srcW = source.getWidth();
         int srcH = source.getHeight();
         float scale = Math.min((float) maxWidth / srcW, (float) maxHeight / srcH);
@@ -168,7 +173,7 @@ final class CarImage {
         return false;
     }
 
-    private static byte[] toPng(Bitmap bitmap) {
+    static byte[] toPng(Bitmap bitmap) {
         ByteArrayOutputStream out = new ByteArrayOutputStream(16384);
         if (!bitmap.compress(Bitmap.CompressFormat.PNG, 90, out)) return null;
         return out.toByteArray();

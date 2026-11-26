@@ -40,7 +40,7 @@ public final class BandMessageTest {
         assertEquals("test-123", reply.getString("id"));
         assertEquals(BuildConfig.VERSION_NAME, reply.getString("phoneApp"));
         assertEquals(1, reply.getInt("protocol"));
-        assertEquals("[\"confirm\",\"cancel\",\"refresh\",\"car_image\",\"theme_v1\",\"band_display\"]", reply.getJSONArray("features").toString());
+        assertEquals("[\"confirm\",\"cancel\",\"refresh\",\"car_image\",\"theme_v1\",\"band_display\",\"control_icons\"]", reply.getJSONArray("features").toString());
     }
 
     @Test public void bandDisplayAcceptsOnlyTheCurrentRevisionAndIgnoresMalformedUpdates() throws Exception {
@@ -80,6 +80,29 @@ public final class BandMessageTest {
         JSONObject reply = BandMessage.carImageReply("img_001", "abcDEF12_34-", 3, 5, "A".repeat(CarImage.CHUNK_CHARS));
         assertEquals("car_image_reply", reply.getString("type"));
         assertTrue(reply.toString().getBytes(StandardCharsets.UTF_8).length <= BandMessage.MAX_BYTES);
+
+        BandMessage statusDay = decode(new JSONObject().put("v", 1).put("id", "sts_001")
+                .put("type", "status").put("themeDay", true));
+        assertEquals(Boolean.TRUE, statusDay.themeDay());
+        assertNull(decode(new JSONObject().put("v", 1).put("id", "sts_002").put("type", "status")).themeDay());
+
+        BandMessage iconReq = decode(new JSONObject().put("v", 1).put("id", "icn_001")
+                .put("type", "control_icon").put("hash", "abcDEF12_34-").put("index", 1));
+        assertEquals("control_icon", iconReq.type());
+        assertEquals("abcDEF12_34-", iconReq.imageHash());
+        assertEquals(1, iconReq.imageIndex());
+        assertNull(decode(new JSONObject().put("v", 1).put("id", "icn_002")
+                .put("type", "control_icon").put("hash", "abcDEF12_34-").put("index", ControlIcons.MAX_CHUNKS + 1)));
+
+        JSONObject iconReply = BandMessage.controlIconReply("icn_001", "abcDEF12_34-", 0, 1, "A".repeat(CarImage.CHUNK_CHARS));
+        assertEquals("control_icon_reply", iconReply.getString("type"));
+        assertTrue(iconReply.toString().getBytes(StandardCharsets.UTF_8).length <= BandMessage.MAX_BYTES);
+
+        JSONObject withIcons = BandMessage.reply("sts_003", "ready", "车况");
+        withIcons.put("actionIcons", new JSONObject().put("trunk", new org.json.JSONArray().put("abcDEF12_34-").put(1)));
+        withIcons.put("message", "中".repeat(655));
+        JSONObject stripped = new JSONObject(BandMessage.encodeReply("sts_003", () -> withIcons, invalid -> fail(invalid.toString())));
+        assertNull(stripped.optJSONObject("actionIcons"));
     }
 
     @Test public void allBrandControlsHaveDistinctWireNames() throws Exception {

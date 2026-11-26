@@ -14,6 +14,7 @@ import java.util.regex.Pattern;
 final class WatchProtocol {
     static final int PROTOCOL = 1;
     static final String COMPACT_EXECUTE_ACK = "compact_execute_ack";
+    static final String CONTROL_ICONS_FEATURE = "control_icons";
     static final int HOME_ACTIONS = 4;
     static final String MIN_PHONE_APP = "0.1.14";
     private static final Pattern VERSION_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)\\.(\\d+)$");
@@ -163,12 +164,24 @@ final class WatchProtocol {
     }
 
     static JSONObject buildCarImageRequest(String id, String hash, int index) throws JSONException {
+        return buildChunkRequest(id, "car_image", hash, index);
+    }
+
+    static JSONObject buildControlIconRequest(String id, String hash, int index) throws JSONException {
+        return buildChunkRequest(id, "control_icon", hash, index);
+    }
+
+    private static JSONObject buildChunkRequest(String id, String type, String hash, int index) throws JSONException {
         return new JSONObject()
                 .put("v", PROTOCOL)
                 .put("id", id)
-                .put("type", "car_image")
+                .put("type", type)
                 .put("hash", hash)
                 .put("index", index);
+    }
+
+    static boolean isActionActive(String action, String direction, boolean available) {
+        return available && ("close".equals(direction) || ("lock".equals(action) && "lock".equals(direction)));
     }
 
     static String compatibilityMessage(JSONObject reply, String watchVersion) {

@@ -332,6 +332,9 @@ test('Galaxy and Lynk keep loading and unknown slots in place and cannot prepare
     const tiles = link.page.displayRows.flatMap(row => [row.first, row.second]).filter(tile => tile.id)
     assert.deepEqual(Array.from(tiles, tile => tile.id), ids)
     assert.deepEqual(Array.from(tiles.slice(0, 2), tile => tile.hint), ['加载中', '状态未知'])
+    assert.equal(tiles[0].displayLabel, '加载中')
+    assert.equal(tiles[0].displayHint, '')
+    assert.equal(tiles[1].displayHint, '状态未知')
     const count = link.sent.length
     link.page.select(ids[0])
     link.page.select(ids[1])
@@ -646,6 +649,7 @@ test('layout keeps two columns for round and square displays and one for tall di
   assert.equal(capsule.page.ui.range, 'range range-capsule')
   assert.equal(capsule.page.ui.split, 'split split-capsule')
   assert.equal(capsule.page.ui.confirmation, 'confirmation confirmation-capsule')
+  assert.equal(capsule.page.ui.confirmActions, 'confirm-actions confirm-actions-capsule')
   capsule.hello()
   capsule.reply({ mapped: ['lock', 'climate', 'window_vent', 'trunk'], available: ['climate'] })
   assert.equal(capsule.page.displayRows.length, 4)
@@ -668,6 +672,7 @@ test('layout keeps two columns for round and square displays and one for tall di
     assert.equal(circle.page.watchHomeSize, expectedHomeSize)
     assert.equal(circle.page.ui.homeScreen, 'home-screen home-screen-circle')
     assert.equal(circle.page.ui.confirmation, 'confirmation confirmation-circle')
+    assert.equal(circle.page.ui.confirmActions, 'confirm-actions confirm-actions-circle')
     assert.equal(
       circle.page.watchHomeUi.car,
       expectedHomeSize === 'standard' ? 'watch-car' : 'watch-car watch-car-' + expectedHomeSize
@@ -693,6 +698,7 @@ test('layout keeps two columns for round and square displays and one for tall di
       '@app-module/system.device': { getInfo({ success }) { success({ screenWidth: width, screenHeight: height, screenShape: 'rect' }) } }
     } })
     assert.equal(link.page.layoutProfile, profile)
+    if (profile === 'rect' || profile === 'square') assert.equal(link.page.ui.confirmActions, 'confirm-actions')
     assert.equal(link.page.useTwoPageShell, profile === 'square')
     link.hello()
     const mapped = ['lock', 'climate', 'window_vent', 'trunk']
@@ -1031,6 +1037,30 @@ test('startup loads cached car image directly without flashing the bundled defau
   deliverSnapshot()
   assert.equal(lynk.page.brand, 'LYNKCO')
   assert.equal(lynk.page.carImageSrc, 'internal://files/car_lynk888.png')
+
+  let deliverCircleCache = null
+  const circle = start({
+    native: {
+      '@app-module/system.device': {
+        getInfo({ success }) { success({ screenWidth: 480, screenHeight: 480, screenShape: 'circle' }) }
+      },
+      '@app-module/system.storage': {
+        get({ key, success }) {
+          if (key === 'car-image-cache') {
+            deliverCircleCache = () => success(storage.get(key) || '')
+            return
+          }
+          success(storage.get(key) || '')
+        },
+        set({ key, value, complete }) { storage.set(key, value); if (complete) complete() }
+      }
+    }
+  })
+  assert.equal(circle.page.homeLayoutReady, false)
+  assert.equal(circle.page.carImageSrc, '')
+  deliverCircleCache()
+  assert.equal(circle.page.homeLayoutReady, true)
+  assert.equal(circle.page.carImageSrc, 'internal://files/car_cached777.png')
 })
 
 test('both home layouts keep a vehicle image when themes change and recover a broken cache', () => {
@@ -1093,7 +1123,7 @@ test('vehicle name defaults to generic label, syncs from phone, persists in snap
   })
   assert.equal(circle.page.vehicleName, '俊哥的星耀8')
   assert.equal(circle.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-hero')
-  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready watch-orb-active')
+  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready')
 
   circle.page.syncStatus()
   circle.reply({
@@ -1102,7 +1132,7 @@ test('vehicle name defaults to generic label, syncs from phone, persists in snap
     controlDirections: { lock: 'lock', climate: 'close' }
   })
   assert.equal(circle.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-pair')
-  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready')
+  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready watch-orb-active')
   assert.equal(circle.page.displayRows[0].second.watchOrbStyle, 'watch-orb watch-orb-ready watch-orb-active')
 
   circle.page.syncStatus()
@@ -1272,4 +1302,243 @@ test('configurable Lynk slot and owner mark contracts remain separate from Galax
   assert.ok(mark.includes("this.description.equals(description)"))
   assert.doesNotMatch(mark, /car_wg_funicon_/)
   assert.ok(source("GalaxyWidgets.java").includes("button.slot().equals(binding.slot()) && !binding.matches(button)"))
+})
+
+test('crown focus follows homeLayoutReady, settings, confirmation, and two-page transitions', () => {
+  const rect = start({
+    native: {
+      '@app-module/system.device': {
+        getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) }
+      }
+    }
+  })
+  const focused = []
+  rect.page.$element = id => ({
+    focus(options) { focused.push([id, options && options.focus]) }
+  })
+
+  rect.page.homeLayoutReady = false
+  rect.page.rectTwoPageLoaded = true
+  rect.page.updateHomeLayoutReady()
+  assert.deepEqual(focused, [['homeScroll', true]])
+  rect.advance(60)
+  assert.deepEqual(focused, [['homeScroll', true], ['homeScroll', true]])
+
+  focused.length = 0
+  rect.page.openSettings()
+  rect.advance(60)
+  assert.deepEqual(focused, [['settingsScroll', true], ['settingsScroll', true]])
+
+  focused.length = 0
+  rect.page.changeRectTwoPage({ checked: true })
+  rect.advance(60)
+  assert.deepEqual(focused, [['settingsScroll', true], ['settingsScroll', true]])
+
+  focused.length = 0
+  rect.page.openThemeEditor()
+  rect.advance(60)
+  assert.deepEqual(focused, [['themeEditorScroll', true], ['themeEditorScroll', true]])
+
+  focused.length = 0
+  rect.page.closeThemeEditor()
+  rect.advance(60)
+  assert.deepEqual(focused, [['settingsScroll', true], ['settingsScroll', true]])
+
+  focused.length = 0
+  rect.page.closeSettings()
+  rect.advance(60)
+  assert.deepEqual(focused, [['watchSwiper', true], ['watchSwiper', true]])
+
+  focused.length = 0
+  rect.page.confirmTitle = '确认解锁？'
+  rect.page.clearConfirmation()
+  rect.advance(60)
+  assert.deepEqual(focused, [['watchSwiper', true], ['watchSwiper', true]])
+})
+
+test('watch controls keep distinct background and orb states across night and day themes', () => {
+  const storage = new Map()
+  const circle = start({
+    native: {
+      '@app-module/system.device': {
+        getInfo({ success }) { success({ screenWidth: 480, screenHeight: 480, screenShape: 'circle' }) }
+      },
+      '@app-module/system.storage': {
+        get({ key, success }) { success(storage.get(key) || '') },
+        set({ key, value, complete }) { storage.set(key, value); if (complete) complete() }
+      }
+    }
+  })
+  circle.hello()
+  circle.reply({
+    mapped: ['lock', 'climate', 'trunk'],
+    available: ['lock', 'climate'],
+    controlDirections: { lock: 'lock', climate: 'open' }
+  })
+  circle.page.themeArt = '/common/themes/alpine-circle-night.jpg'
+  circle.page.themeNight = true
+  circle.page.updateRows()
+  assert.equal(circle.page.displayRows[0].first.watchCellStateStyle, ' watch-cell-active')
+  assert.equal(circle.page.displayRows[0].second.watchCellStateStyle, ' watch-cell-ready')
+  assert.equal(circle.page.displayRows[1].first.watchCellStateStyle, ' watch-cell-paused')
+  assert.equal(circle.page.displayRows[0].first.watchOrbDayStyle, '')
+
+  circle.page.themeArt = '/common/themes/alpine-circle-day.jpg'
+  circle.page.themeNight = false
+  circle.page.updateRows()
+  assert.equal(circle.page.displayRows[0].first.watchCellStateStyle, ' watch-cell-active-day')
+  assert.equal(circle.page.displayRows[0].second.watchCellStateStyle, ' watch-cell-ready-day')
+  assert.equal(circle.page.displayRows[1].first.watchCellStateStyle, ' watch-cell-paused-day')
+  assert.equal(circle.page.displayRows[0].first.watchOrbDayStyle, ' watch-orb-active-day')
+  assert.equal(circle.page.displayRows[0].second.watchOrbDayStyle, ' watch-orb-ready-day')
+
+  circle.page.syncStatus()
+  circle.reply({
+    theme: { themeId: 'alpine', mode: 'fixed', variant: 'day', dayStartMinute: 360, nightStartMinute: 1080 },
+    mapped: ['lock', 'climate', 'trunk'],
+    available: ['lock', 'climate'],
+    controlDirections: { lock: 'unlock', climate: 'close' }
+  })
+  assert.equal(circle.page.displayRows[0].first.watchCellStateStyle, ' watch-cell-ready-day')
+  assert.equal(circle.page.displayRows[0].second.watchCellStateStyle, ' watch-cell-active-day')
+})
+
+test('control icon sync pulls widget icons by hash, caches them, and falls back cleanly on error', () => {
+  const files = new Map()
+  const storage = new Map()
+  const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4])
+  const b64 = pngBytes.toString('base64')
+  const part0 = b64.slice(0, 6)
+  const part1 = b64.slice(6)
+  const native = {
+    '@app-module/system.device': {
+      getInfo({ success }) { success({ screenWidth: 480, screenHeight: 480, screenShape: 'circle' }) }
+    },
+    '@app-module/system.storage': {
+      get({ key, success }) { success(storage.get(key) || '') },
+      set({ key, value, complete }) { storage.set(key, value); if (complete) complete() }
+    },
+    '@app-module/system.file': {
+      writeArrayBuffer({ uri, buffer, success }) { files.set(uri, Buffer.from(buffer)); success() },
+      delete({ uri }) { files.delete(uri) }
+    }
+  }
+  const link = start({ native })
+  link.hello({ features: ['confirm', 'cancel', 'refresh', 'car_image', 'control_icons'] })
+  assert.equal(link.sent.at(-1).data.type, 'status')
+  assert.equal(link.sent.at(-1).data.themeDay, false)
+
+  link.reply({
+    mapped: ['lock', 'trunk'],
+    available: ['lock', 'trunk'],
+    controlDirections: { lock: 'unlock' },
+    actionIcons: { trunk: ['trunkhash123', 2] }
+  })
+  assert.equal(link.sent.at(-1).data.type, 'control_icon')
+  assert.equal(link.sent.at(-1).data.hash, 'trunkhash123')
+  assert.equal(link.sent.at(-1).data.index, 0)
+
+  link.receive({ v: 1, id: link.sent.at(-1).data.id, type: 'control_icon_reply', hash: 'trunkhash123', index: 0, total: 2, data: part0 })
+  assert.equal(link.sent.at(-1).data.type, 'control_icon')
+  assert.equal(link.sent.at(-1).data.index, 1)
+
+  link.receive({ v: 1, id: link.sent.at(-1).data.id, type: 'control_icon_reply', hash: 'trunkhash123', index: 1, total: 2, data: part1 })
+  assert.equal(files.get('internal://files/cicon_trunkhash123.png').equals(pngBytes), true)
+  assert.equal(link.page.displayRows[0].second.icon, 'internal://files/cicon_trunkhash123.png')
+
+  link.page.select('trunk')
+  link.reply({ status: 'confirm', action: 'trunk', token: 't'.repeat(36), message: '打开后备箱' })
+  assert.equal(link.page.themeConfirmIcon, 'internal://files/cicon_trunkhash123.png')
+  link.page.cancel()
+
+  const reopened = start({ native })
+  reopened.hello({ features: ['confirm', 'cancel', 'refresh', 'car_image', 'control_icons'] })
+  reopened.reply({
+    mapped: ['lock', 'trunk'],
+    available: ['lock', 'trunk'],
+    controlDirections: { lock: 'unlock' },
+    actionIcons: { trunk: ['trunkhash123', 2] }
+  })
+  assert.equal(reopened.page.displayRows[0].second.icon, 'internal://files/cicon_trunkhash123.png')
+  assert.equal(reopened.types().includes('control_icon'), false)
+
+  reopened.page.onControlIconError('trunk')
+  assert.equal(reopened.page.displayRows[0].second.icon, '/common/images/trunk.png')
+})
+
+test('startup waits for late interconnect onopen without false send failure toast', () => {
+  let state = 2
+  const sent = []
+  const focused = []
+  const connection = {
+    send(message) {
+      sent.push(message)
+      if (state !== 1) message.fail()
+    },
+    getReadyState({ success }) {
+      success({ status: state })
+    }
+  }
+  const link = start({
+    native: {
+      '@app-module/system.device': {
+        getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) }
+      },
+      '@app-module/system.interconnect': {
+        instance: () => connection
+      }
+    }
+  })
+  link.page.$element = id => ({
+    focus(options) { focused.push([id, options && options.focus]) }
+  })
+  assert.equal(link.page.homeLayoutReady, true)
+  link.advance(1000)
+  assert.equal(sent.length, 0)
+  assert.equal(link.page.toastText, '')
+  assert.equal(link.page.handshakeComplete, false)
+
+  state = 1
+  connection.onopen()
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].data.type, 'hello')
+  assert.equal(link.page.toastText, '')
+
+  connection.onmessage({
+    data: JSON.stringify({ v: 1, id: sent[0].data.id, type: 'hello-reply', phoneApp: '0.2.8', protocol: 1, features: ['confirm'] })
+  })
+  assert.equal(sent.length, 2)
+  assert.equal(sent[1].data.type, 'status')
+  assert.equal(link.page.toastText, '')
+})
+
+test('unready openTimer fallback hello failure does not mark handshake complete or falsely toast', () => {
+  let state = 0
+  const sent = []
+  const connection = {
+    send(message) {
+      sent.push(message)
+      if (state !== 1) message.fail()
+    },
+    getReadyState() {}
+  }
+  const link = start({
+    native: {
+      '@app-module/system.interconnect': { instance: () => connection }
+    }
+  })
+  link.advance(600)
+  assert.equal(sent.length, 1)
+  assert.equal(sent[0].data.type, 'hello')
+  assert.equal(link.page.handshakeComplete, false)
+  assert.equal(link.page.toastText, '')
+
+  state = 1
+  connection.onopen()
+  assert.equal(sent.at(-1).data.type, 'hello')
+  connection.onmessage({
+    data: JSON.stringify({ v: 1, id: sent.at(-1).data.id, type: 'hello-reply', phoneApp: '0.2.8', protocol: 1, features: ['confirm'] })
+  })
+  assert.equal(sent.at(-1).data.type, 'status')
+  assert.equal(link.page.toastText, '')
 })

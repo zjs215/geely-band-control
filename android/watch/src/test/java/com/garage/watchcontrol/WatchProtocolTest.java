@@ -68,6 +68,17 @@ public final class WatchProtocolTest {
         assertEquals("car_image", carImg.getString("type"));
         assertEquals("hash1234", carImg.getString("hash"));
         assertEquals(2, carImg.getInt("index"));
+
+        JSONObject ctrlIcon = WatchProtocol.buildControlIconRequest("abc_4", "iconhash", 1);
+        assertEquals("control_icon", ctrlIcon.getString("type"));
+        assertEquals("iconhash", ctrlIcon.getString("hash"));
+        assertEquals(1, ctrlIcon.getInt("index"));
+
+        assertTrue(WatchProtocol.isActionActive("lock", "lock", true));
+        assertFalse(WatchProtocol.isActionActive("lock", "unlock", true));
+        assertTrue(WatchProtocol.isActionActive("climate", "close", true));
+        assertFalse(WatchProtocol.isActionActive("climate", "open", true));
+        assertFalse(WatchProtocol.isActionActive("lock", "lock", false));
     }
 
     @Test public void validatesCompatibilityAndDirectionLabels() throws Exception {

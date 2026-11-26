@@ -701,7 +701,7 @@ test('vehicle name defaults to generic label, syncs from phone, persists in snap
   })
   assert.equal(circle.page.vehicleName, '俊哥的领克08')
   assert.equal(circle.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-hero')
-  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready watch-orb-active')
+  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready')
 
   circle.page.syncStatus()
   circle.reply({
@@ -710,7 +710,7 @@ test('vehicle name defaults to generic label, syncs from phone, persists in snap
     controlDirections: { lock: 'lock', climate: 'close' }
   })
   assert.equal(circle.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-pair')
-  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready')
+  assert.equal(circle.page.displayRows[0].first.watchOrbStyle, 'watch-orb watch-orb-ready watch-orb-active')
   assert.equal(circle.page.displayRows[0].second.watchOrbStyle, 'watch-orb watch-orb-ready watch-orb-active')
 
   circle.page.syncStatus()

@@ -11,10 +11,16 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 record BandMessage(String id, String type, CarAction action, String token, ControlDirection direction,
-                   String imageHash, int imageIndex, String brand, BandDisplay bandDisplay, boolean compactAck) {
+                   String imageHash, int imageIndex, String brand, BandDisplay bandDisplay, boolean compactAck,
+                   Boolean themeDay) {
+    BandMessage(String id, String type, CarAction action, String token, ControlDirection direction,
+                String imageHash, int imageIndex, String brand, BandDisplay bandDisplay, boolean compactAck) {
+        this(id, type, action, token, direction, imageHash, imageIndex, brand, bandDisplay, compactAck, null);
+    }
+
     BandMessage(String id, String type, CarAction action, String token, ControlDirection direction,
                 String imageHash, int imageIndex, String brand) {
-        this(id, type, action, token, direction, imageHash, imageIndex, brand, null, false);
+        this(id, type, action, token, direction, imageHash, imageIndex, brand, null, false, null);
     }
 
     BandMessage(String id, String type, CarAction action, String token, ControlDirection direction) {
@@ -23,6 +29,7 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
 
     static final int MAX_BYTES = 2048;
     static final String COMPACT_EXECUTE_ACK = "compact_execute_ack";
+    static final String CONTROL_ICONS_FEATURE = "control_icons";
     private static final Pattern ID = Pattern.compile("[a-zA-Z0-9_-]{6,48}");
     private static final Pattern HASH = Pattern.compile("[a-zA-Z0-9_-]{6,32}");
     private static final int VERSION = 1;
@@ -43,7 +50,8 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
         switch (type) {
             case "hello", "refresh": return new BandMessage(id, type, null, "", null);
             case "status": return new BandMessage(id, type, null, "", null, "", -1, "",
-                    BandDisplay.parse(input.optJSONObject("bandDisplay")), false);
+                    BandDisplay.parse(input.optJSONObject("bandDisplay")), false,
+                    input.has("themeDay") ? Boolean.valueOf(input.optBoolean("themeDay")) : null);
             case "prepare":
                 if (action == null) return null;
                 String desired = input.optString("controlDirection");
@@ -67,10 +75,11 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
                         : new BandMessage(id, type, action, token, null, "", -1, "", null,
                         Boolean.TRUE.equals(input.opt("compactAck")));
             case "cancel": return token.length() != 36 ? null : new BandMessage(id, type, null, token, null);
-            case "car_image":
+            case "car_image", "control_icon":
                 String hash = input.optString("hash");
                 int index = input.optInt("index", -1);
-                if (!HASH.matcher(hash).matches() || index < 0 || index > 200) return null;
+                int maxIndex = "control_icon".equals(type) ? ControlIcons.MAX_CHUNKS : 200;
+                if (!HASH.matcher(hash).matches() || index < 0 || index > maxIndex) return null;
                 return new BandMessage(id, type, null, "", null, hash, index, "");
             default: return null;
         }
@@ -86,6 +95,11 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
                 .put("hash", hash).put("index", index).put("total", total).put("data", data);
     }
 
+    static JSONObject controlIconReply(String id, String hash, int index, int total, String data) throws JSONException {
+        return envelope(id, "control_icon_reply")
+                .put("hash", hash).put("index", index).put("total", total).put("data", data);
+    }
+
     static JSONObject executeAck(String id, String status, String message) throws JSONException {
         return envelope(id, "execute_ack").put("status", status).put("message", message);
     }
@@ -93,7 +107,7 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
     static JSONObject helloReply(String id, String phoneApp) throws JSONException {
         return envelope(id, "hello-reply").put("phoneApp", phoneApp).put("protocol", VERSION)
                 .put("features", new JSONArray().put("confirm").put("cancel").put("refresh").put("car_image")
-                        .put(ThemeConfig.FEATURE).put(BandDisplay.FEATURE));
+                        .put(ThemeConfig.FEATURE).put(BandDisplay.FEATURE).put(CONTROL_ICONS_FEATURE));
     }
 
     static String encodeReply(String id, ReplyBuilder builder, Consumer<Exception> onError) {
@@ -101,6 +115,10 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
             JSONObject reply = builder.build();
             String text = reply.toString();
             if (fits(text)) return text;
+            if (reply.remove("actionIcons") != null) {
+                text = reply.toString();
+                if (fits(text)) return text;
+            }
             if (reply.remove("theme") != null) {
                 text = reply.toString();
                 if (fits(text)) return text;
