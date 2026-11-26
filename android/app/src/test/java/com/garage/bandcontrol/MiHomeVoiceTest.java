@@ -28,17 +28,15 @@ public final class MiHomeVoiceTest {
         }
     }
 
-    @Test public void lynkRoutesAreExplicitAndDirectionsNeverGuessed() {
+    @Test public void lynkListsOnlyTestAndToggleCommands() {
+        assertEquals(4, MiHomeVoice.commands("LYNKCO_V1").length);
         for (MiHomeVoice.Command command : MiHomeVoice.commands("LYNKCO_V1")) {
             assertEquals(command, MiHomeVoice.match("LYNKCO_V1", "LYNKCO_V1:" + command.name(), null, null).command());
+            assertNull(MiHomeVoice.action("LYNKCO_V1", command));
         }
-        assertEquals(CarAction.LYNK_UNLOCK, MiHomeVoice.action("LYNKCO_V1", LOCK));
-        assertEquals(CarAction.LYNK_UNLOCK, MiHomeVoice.action("LYNKCO_V1", UNLOCK));
-        for (MiHomeVoice.Command command : new MiHomeVoice.Command[]{WINDOW_OPEN, WINDOW_VENT, MiHomeVoice.Command.WINDOW_CLOSE}) {
-            assertEquals(CarAction.LYNK_WINDOW, MiHomeVoice.action("LYNKCO_V1", command));
-            assertFalse(command.directionBlock(null).isEmpty());
+        for (MiHomeVoice.Command command : new MiHomeVoice.Command[]{LOCK, UNLOCK, WINDOW_OPEN, WINDOW_VENT, MiHomeVoice.Command.WINDOW_CLOSE}) {
+            assertNull(MiHomeVoice.match("LYNKCO_V1", "LYNKCO_V1:" + command.name(), null, null));
         }
-        assertEquals("", MiHomeVoice.Command.WINDOW_CLOSE.directionBlock(ControlDirection.CLOSE));
         assertNull(MiHomeVoice.match("UNKNOWN", "UNKNOWN:TEST", null, null));
         assertNull(MiHomeVoice.match("LYNKCO_V1", "LYNKCO_V1:LOCK", "LYNKCO_V1:ENGINE", null));
     }

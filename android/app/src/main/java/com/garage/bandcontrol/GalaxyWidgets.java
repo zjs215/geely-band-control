@@ -364,17 +364,6 @@ class GalaxyWidgets {
         return true;
     }
 
-    String voiceEvidence(MiHomeVoice.Command command, Control control) {
-        if (config.slotMode != BrandConfig.SlotMode.CONFIGURABLE) return "";
-        if (control == null || control.target() == null) return "请在手机核对领克卡片槽位";
-        Binding binding = primary().binding(control.target().button());
-        if (binding == null || binding.mark() == null || !binding.mark().permits(command))
-            return "请先在手机明确标记当前锁/车窗功能并核对状态；未验证功能不能语音执行";
-        if (!primary().validReading) return "当前卡片状态不可读，请刷新并核对锁/车窗状态";
-        if (control.target().direction() == null) return "当前方向未知，请在手机核对当前卡片的锁/车窗状态并重新标记";
-        return command.directionBlock(control.target().direction());
-    }
-
     VehicleStatus vehicle() {
         Card card = primary();
         return card == null ? VehicleStatus.EMPTY : card.latest;

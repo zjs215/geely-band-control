@@ -410,17 +410,17 @@ public final class GarageApp extends Application {
         LynkConfirmation toggle = brand == BrandConfig.LYNKCO ? switch (command) {
             case WINDOW_TOGGLE -> LynkConfirmation.WINDOW_TOGGLE;
             case LOCK_TOGGLE -> LynkConfirmation.LOCK_TOGGLE;
+            case TRUNK_TOGGLE -> LynkConfirmation.TRUNK_TOGGLE;
             default -> null;
         } : null;
         CarAction action;
         GalaxyWidgets.Control control;
         if (toggle != null) {
-            boolean windowToggle = toggle == LynkConfirmation.WINDOW_TOGGLE;
-            String function = windowToggle ? "车窗" : "车锁";
+            String function = toggle.label.substring("切换".length());
             Map.Entry<CarAction, GalaxyWidgets.Control> selected = null;
             for (var entry : widgets.controls().entrySet()) {
                 GalaxyWidgets.Target target = entry.getValue().target();
-                if (target == null || !(windowToggle ? target.isLynkWindow() : target.isLynkLock())) continue;
+                if (target == null || !matchesLynkToggle(target, toggle)) continue;
                 if (selected != null) {
                     setResult("语音" + toggle.label + " · 官方卡片有多个" + function + "按钮，请在穿戴端选择");
                     return;
@@ -443,16 +443,23 @@ public final class GarageApp extends Application {
             if (toggle != null && !widgets.hasValidReading(control.target().cardId())) {
                 blocked = "当前卡片状态不可读，请先刷新领克车况";
             } else if (toggle == null) {
-                blocked = brand == BrandConfig.LYNKCO ? widgets.voiceEvidence(command, control)
-                    : command.directionBlock(control.target().direction());
+                blocked = command.directionBlock(control.target().direction());
             }
         }
-        DispatchResult result = blocked.isEmpty() ? dispatchControl(action, control.target(), true,
-                toggle != null ? toggle : lynkConfirmation(control.target(), false))
+        DispatchResult result = blocked.isEmpty() ? dispatchControl(action, control.target(), true, toggle)
                 : new DispatchResult("blocked", blocked);
         Log.i(TAG, "event=dispatch_result id=" + id + " type=voice action=" + action.id
                 + " command=" + command + " result=" + result.state());
         setResult("语音" + command.label + " · " + result.note());
+    }
+
+    private static boolean matchesLynkToggle(GalaxyWidgets.Target target, LynkConfirmation toggle) {
+        return switch (toggle) {
+            case WINDOW_TOGGLE -> target.isLynkWindow();
+            case LOCK_TOGGLE -> target.isLynkLock();
+            case TRUNK_TOGGLE -> target.isLynkTrunk();
+            default -> false;
+        };
     }
 
     private void onBandMessage(String node, byte[] data) {
@@ -511,7 +518,7 @@ public final class GarageApp extends Application {
             return;
         }
         String token = confirmations.prepare(node, request.action(), target.key(), SystemClock.elapsedRealtime());
-        LynkConfirmation known = lynkConfirmation(target, true);
+        LynkConfirmation known = lynkConfirmation(target);
         String title = known == null ? target.title() : "领克 · " + known.label;
         send(node, request.id(), () -> BandMessage.reply(request.id(), "confirm", title)
                 .put("token", token).put("action", request.action().id));
@@ -542,7 +549,7 @@ public final class GarageApp extends Application {
             dispatchReply(node, request, "blocked", "确认已失效或按钮已变化，请重新选择");
             return;
         }
-        DispatchResult result = dispatchControl(request.action(), target, false, lynkConfirmation(target, true));
+        DispatchResult result = dispatchControl(request.action(), target, false, lynkConfirmation(target));
         receipt(node, request, result.state(), result.note());
     }
 
@@ -580,10 +587,10 @@ public final class GarageApp extends Application {
         return new DispatchResult("dispatched", DISPATCHED);
     }
 
-    private LynkConfirmation lynkConfirmation(GalaxyWidgets.Target target, boolean allowToggle) {
+    private LynkConfirmation lynkConfirmation(GalaxyWidgets.Target target) {
         if (brand != BrandConfig.LYNKCO || !widgets.hasValidReading(target.cardId())) return null;
         LynkConfirmation marked = LynkConfirmation.forMark(target.lockState(), target.direction());
-        if (marked == null && allowToggle) {
+        if (marked == null) {
             if (target.isLynkWindow()) return LynkConfirmation.WINDOW_TOGGLE;
             if (target.isLynkLock()) return LynkConfirmation.LOCK_TOGGLE;
             if (target.isLynkTrunk()) return LynkConfirmation.TRUNK_TOGGLE;

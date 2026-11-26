@@ -8,9 +8,6 @@ public final class LynkMarkTest {
         assertFalse(mark.matches("fr_kjck", "synthetic-a", "fixture"));
         assertFalse(mark.matches("fr_window", "synthetic-b", "fixture"));
         assertFalse(mark.matches("fr_window", "synthetic-a", "changed"));
-        assertTrue(mark.permits(MiHomeVoice.Command.WINDOW_VENT));
-        assertFalse(mark.permits(MiHomeVoice.Command.WINDOW_OPEN));
-        assertFalse(mark.permits(MiHomeVoice.Command.ENGINE));
     }
     @Test public void signatureChangeInvalidatesPreparedTicket() {
         Confirmation confirmations = new Confirmation();

@@ -14,6 +14,9 @@ final class MiHomeVoice {
 
     enum Command {
         TEST(null, "测试", null),
+        LOCK_TOGGLE(CarAction.LYNK_UNLOCK, "切换车锁", null),
+        WINDOW_TOGGLE(CarAction.LYNK_WINDOW, "切换车窗", null),
+        TRUNK_TOGGLE(CarAction.TRUNK, "切换后备箱", null),
         LOCK(CarAction.LOCK, "上锁", ControlDirection.LOCK),
         UNLOCK(CarAction.LOCK, "解锁", ControlDirection.UNLOCK),
         CLIMATE(CarAction.CLIMATE),
@@ -27,8 +30,6 @@ final class MiHomeVoice {
         DEFROST(CarAction.DEFROST),
         SENTRY(CarAction.SENTRY),
         WINDOW_CLOSE(CarAction.WINDOW_OPEN, "关窗", ControlDirection.CLOSE),
-        WINDOW_TOGGLE(CarAction.LYNK_WINDOW, "切换车窗", null),
-        LOCK_TOGGLE(CarAction.LYNK_UNLOCK, "切换车锁", null),
         ENGINE(null, "发动机（待验证）", null),
         SUNROOF(null, "天窗（待验证）", null);
 
@@ -67,11 +68,11 @@ final class MiHomeVoice {
             default -> false;
         };
         if ("LYNKCO_V1".equals(namespace)) return switch (command) {
-            case TEST, LOCK, UNLOCK, WINDOW_VENT, WINDOW_OPEN, WINDOW_CLOSE, WINDOW_TOGGLE, LOCK_TOGGLE -> true;
+            case TEST, LOCK_TOGGLE, WINDOW_TOGGLE, TRUNK_TOGGLE -> true;
             default -> false;
         };
         return "GARAGE_V1".equals(namespace) && command != Command.WINDOW_CLOSE
-                && command != Command.WINDOW_TOGGLE && command != Command.LOCK_TOGGLE
+                && command != Command.WINDOW_TOGGLE && command != Command.LOCK_TOGGLE && command != Command.TRUNK_TOGGLE
                 && command != Command.ENGINE && command != Command.SUNROOF;
     }
 
@@ -80,13 +81,7 @@ final class MiHomeVoice {
     }
 
     static CarAction action(String namespace, Command command) {
-        if (!enabled(namespace, command)) return null;
-        if ("LYNKCO_V1".equals(namespace)) return switch (command) {
-            case LOCK, UNLOCK -> CarAction.LYNK_UNLOCK;
-            case WINDOW_VENT, WINDOW_OPEN, WINDOW_CLOSE -> CarAction.LYNK_WINDOW;
-            case WINDOW_TOGGLE, LOCK_TOGGLE -> null; // Resolve the button on the live card.
-            default -> null;
-        };
+        if (!enabled(namespace, command) || "LYNKCO_V1".equals(namespace)) return null; // Resolve Lynk slots on the live card.
         return command.action;
     }
 

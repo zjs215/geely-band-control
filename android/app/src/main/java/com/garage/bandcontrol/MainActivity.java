@@ -554,7 +554,6 @@ public final class MainActivity extends Activity {
         container.addView(input);
         dialogs.builder()
                 .setTitle("自定义车辆名称")
-                .setMessage("手环与手表首屏将显示此名称，留空则恢复为「" + GarageApp.DEFAULT_VEHICLE_NAME + "」。")
                 .setView(container)
                 .setNeutralButton("恢复默认", (dialog, which) -> app.setVehicleName(""))
                 .setNegativeButton("取消", null)
@@ -581,16 +580,26 @@ public final class MainActivity extends Activity {
     }
 
     private void showVoiceCommands() {
-        MiHomeVoice.Command[] commands = MiHomeVoice.commands(app.brand.namespace);
+        String namespace = app.brand.namespace;
+        MiHomeVoice.Command[] commands = MiHomeVoice.commands(namespace);
         String[] choices = new String[commands.length];
+        String[] codes = new String[commands.length];
         for (int index = 0; index < commands.length; index++) {
             MiHomeVoice.Command command = commands[index];
-            choices[index] = command.label + "\n" + (app.brand.namespace + ":" + command.name());
+            String label = "LYNKCO_V1".equals(namespace) ? switch (command) {
+                case TEST -> command.label;
+                case LOCK_TOGGLE -> "切换车锁（免标记，可上锁或解锁）";
+                case WINDOW_TOGGLE -> "切换车窗（免标记，可开窗或关窗）";
+                case TRUNK_TOGGLE -> "切换后备箱（免标记，可打开或关闭）";
+                default -> command.label;
+            } : command.label;
+            codes[index] = namespace + ":" + command.name();
+            choices[index] = label + "\n" + codes[index];
         }
         dialogs.builder()
                 .setTitle("点按复制通知指令码")
                 .setItems(choices, (dialog, index) -> getSystemService(ClipboardManager.class)
-                        .setPrimaryClip(ClipData.newPlainText("米家指令码", (app.brand.namespace + ":" + commands[index].name()))))
+                        .setPrimaryClip(ClipData.newPlainText("米家指令码", codes[index])))
                 .setNegativeButton("关闭", null)
                 .show();
     }
@@ -731,7 +740,7 @@ public final class MainActivity extends Activity {
         dialogs.builder()
                 .setTitle("允许车控")
                 .setMessage("请确认当前卡片选中目标车辆，且映射按钮与" + app.brand.name + "小组件配置一致。米家语音指令或穿戴端确认将触发对应的官方按钮。"
-                        + (app.brand == BrandConfig.LYNKCO ? "领克语音无需穿戴设备。切换车锁或车窗会点击官方按钮，由车主判断当前状态。与本次动作匹配的官方弹窗可由伴侣提交。" : "")
+                        + (app.brand == BrandConfig.LYNKCO ? "领克语音无需穿戴设备。切换车锁、车窗或后备箱会点击对应的官方按钮，由车主判断当前状态。与本次动作匹配的官方弹窗可由伴侣提交。" : "")
                         + "\n\n安全与免责提示：本工具为独立开源项目，与吉利汽车及小米无官方关联。远程控车存在通信与刷新延迟，车辆实际状态以" + app.brand.appName + " App 为准；"
                         + "米家语音收到通知后将直接执行，请谨慎设置触发口令；如搭配穿戴设备使用，请开启锁屏密码，离车或非本人佩戴时及时关闭车控授权。")
                 .setNegativeButton("取消", null)
