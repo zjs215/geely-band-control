@@ -67,7 +67,7 @@ class GalaxyWidgets {
 
         String lynkShortLabel() {
             String category = lockState;
-            LynkWidgetIcons.Kind icon = button.lynkDisplayIcon();
+            LynkWidgetIcons.Kind icon = button.lynkIcon();
             if (category.isEmpty() && icon != null) {
                 category = switch (icon) {
                     case WINDOW_VENT -> "车窗微开";
@@ -543,7 +543,7 @@ class GalaxyWidgets {
                     : ControlDirection.fromId(mark.direction());
             String title = mark != null
                     ? action.label + " · 车主标记：" + category + (direction == null ? " · 请核对方向" : " · " + direction.id)
-                    : button.lynkDisplayIcon() == null ? action.label : button.lynkDisplayIcon().label() + " · 请核对方向";
+                    : button.lynkIcon() == null ? action.label : button.lynkIcon().label() + " · 请核对方向";
             Target target = new Target(card.id, button, title, category, direction);
             String label = target.lynkShortLabel();
             if (label.isEmpty()) card.lynkSlotLabels.remove(slot);

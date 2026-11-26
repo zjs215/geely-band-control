@@ -39,7 +39,7 @@ final class LynkWidgets extends GalaxyWidgets {
                                WidgetTree.Button button, boolean ownerMarked) {
         if (tree.confirmationVisible(root)) return SlotState.CONFIRMING;
         if (tree.loading(root) || tree.slotLoading(root, slot)) return SlotState.LOADING;
-        if (button == null || (!ownerMarked && button.match() == null && button.lynkDisplayIcon() == null)) {
+        if (button == null || (!ownerMarked && button.match() == null && button.lynkIcon() == null)) {
             return SlotState.UNKNOWN;
         }
         return SlotState.READY;

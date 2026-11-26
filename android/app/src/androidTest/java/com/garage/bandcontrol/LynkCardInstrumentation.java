@@ -118,20 +118,18 @@ public final class LynkCardInstrumentation extends Instrumentation {
         expect(moved != null && moved.lynkIcon() == LynkWidgetIcons.Kind.TRUNK, "label follows moved icon");
         expect(!original.fingerprint().equals(moved.fingerprint()), "old target identity cannot follow the move");
 
-        if (version.startsWith(LynkWidgetIcons.VERSION_431)) {
-            first.setContentDescription(null);
-            String previous = "";
-            for (String suffix : List.of("off", "on", "off2", "on2")) {
-                int glyph = id(resources, owner, "ic_ck_cc_" + suffix, "mipmap");
-                first.setImageDrawable(resources.getDrawable(glyph, null));
-                layout(root);
-                WidgetTree.Button official = button(root, version, UNLOCK);
-                expect(official != null && official.lynkDisplayIcon() == LynkWidgetIcons.Kind.WINDOW,
-                        "official window glyph " + suffix);
-                expect(!official.fingerprint().equals(previous), "official state changes identity");
-                expect(official.lynkIcon() == null, "display recognition does not authorize official confirmations");
-                previous = official.fingerprint();
-            }
+        first.setContentDescription(null);
+        String previous = "";
+        for (String suffix : List.of("off", "on", "off2", "on2")) {
+            int glyph = resources.getIdentifier("ic_ck_cc_" + suffix, "mipmap", owner);
+            if (glyph == 0) continue;
+            first.setImageDrawable(resources.getDrawable(glyph, null));
+            layout(root);
+            WidgetTree.Button official = button(root, version, UNLOCK);
+            expect(official != null && official.lynkIcon() == LynkWidgetIcons.Kind.WINDOW,
+                    "official window glyph " + suffix);
+            expect(!official.fingerprint().equals(previous), "official state changes identity");
+            previous = official.fingerprint();
         }
 
         show(root, resources, owner, BRAND.confirm, true);

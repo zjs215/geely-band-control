@@ -16,7 +16,6 @@ import java.util.WeakHashMap;
 
 /** Identifies the displayed icon. It does not establish the vehicle's state or the next action. */
 final class LynkWidgetIcons {
-    static final String VERSION_431 = "403101550:";
     enum Kind {
         LOCK("车锁", ""),
         CLOSED_LOCK("车锁", "闭锁图标"),
@@ -51,11 +50,6 @@ final class LynkWidgetIcons {
     private final Map<Resources, Catalog> catalogs = new WeakHashMap<>();
 
     Kind identify(ImageView image, String description, String providerVersion) {
-        Kind drawn = providerVersion.startsWith("402090100:") ? fromIcon(image, providerVersion) : null;
-        return match(fromDescription(description), drawn);
-    }
-
-    Kind identifyForDisplay(ImageView image, String description, String providerVersion) {
         return match(fromDescription(description), fromIcon(image, providerVersion));
     }
 
@@ -70,7 +64,7 @@ final class LynkWidgetIcons {
         return switch (value) {
             case "车锁", "锁车", "上锁", "解锁", "闭锁", "锁定车辆", "上锁车辆", "解锁车辆", "解锁车门",
                     "上锁车门", "车门已解锁", "车门已上锁", "车门未锁", "车辆已解锁", "车辆已上锁" -> Kind.LOCK;
-            case "车窗", "关窗", "关闭车窗" -> Kind.WINDOW;
+            case "车窗", "开窗", "打开车窗", "开启车窗", "关窗", "关闭车窗" -> Kind.WINDOW;
             case "车窗微开", "微开车窗" -> Kind.WINDOW_VENT;
             case "车窗全开", "全开车窗" -> Kind.WINDOW_OPEN;
             case "后备箱", "打开后备箱", "开启后备箱", "关闭后备箱",
