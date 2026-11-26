@@ -1,5 +1,7 @@
 package com.garage.bandcontrol;
 
+import com.garage.appearance.ThemeConfig;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -14,6 +16,20 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public final class BandMessageTest {
+    @Test public void executeAcknowledgmentIsOptInAndDoesNotCarryVehicleState() throws Exception {
+        JSONObject input = new JSONObject().put("v", 1).put("id", "test-123").put("type", "execute")
+                .put("token", "11111111-1111-1111-1111-111111111111").put("action", "lynk_unlock");
+        assertEquals(false, decode(input).compactAck());
+        assertEquals(false, decode(input.put("compactAck", "true")).compactAck());
+        BandMessage request = decode(input.put("compactAck", true));
+        assertTrue(request.compactAck());
+        JSONObject reply = BandMessage.executeAck(request.id(), "unknown", "请核对结果");
+        assertEquals(5, reply.length());
+        assertEquals("execute_ack", reply.getString("type"));
+        assertEquals("unknown", reply.getString("status"));
+        assertEquals(request.id(), reply.getString("id"));
+    }
+
     @Test public void helloRoundTripsWithTheProtocolAndSupportedFeatures() throws Exception {
         BandMessage request = decode(new JSONObject().put("v", 1).put("id", "test-123")
                 .put("type", "hello").put("bandApp", "0.1.16").put("minPhoneApp", "0.1.14"));
@@ -24,7 +40,31 @@ public final class BandMessageTest {
         assertEquals("test-123", reply.getString("id"));
         assertEquals(BuildConfig.VERSION_NAME, reply.getString("phoneApp"));
         assertEquals(1, reply.getInt("protocol"));
-        assertEquals("[\"confirm\",\"cancel\",\"refresh\",\"car_image\"]", reply.getJSONArray("features").toString());
+        assertEquals("[\"confirm\",\"cancel\",\"refresh\",\"car_image\",\"theme_v1\",\"band_display\"]", reply.getJSONArray("features").toString());
+    }
+
+    @Test public void bandDisplayAcceptsOnlyTheCurrentRevisionAndIgnoresMalformedUpdates() throws Exception {
+        JSONObject message = new JSONObject().put("v", 1).put("id", "test-123").put("type", "status");
+        BandDisplay first = BandDisplay.INITIAL.accept(decode(message.put("bandDisplay", new BandDisplay(true, 0).json())).bandDisplay());
+        assertEquals(new BandDisplay(true, 1), first);
+        BandDisplay phoneEdit = first.select(false);
+        assertEquals(new BandDisplay(false, 2), phoneEdit);
+        assertSame(phoneEdit, phoneEdit.accept(new BandDisplay(true, 1)));
+        assertSame(phoneEdit, phoneEdit.accept(new BandDisplay(false, 2)));
+        assertNull(decode(message.put("bandDisplay", new JSONObject().put("twoPage", true).put("revision", "2"))).bandDisplay());
+        assertNull(decode(message.put("type", "hello")).bandDisplay());
+    }
+
+    @Test public void themeIsOptionalWhenVehicleStateFillsTheReply() throws Exception {
+        String id = "test-123";
+        JSONObject state = BandMessage.reply(id, "ready", "车况");
+        state.put("theme", ThemeConfig.CLASSIC.json());
+        assertEquals(ThemeConfig.CLASSIC, ThemeConfig.fromJson(new JSONObject(BandMessage.encodeReply(id,
+                () -> state, invalid -> fail(invalid.toString()))).getJSONObject("theme")));
+        state.put("message", "中".repeat(655));
+        JSONObject bounded = new JSONObject(BandMessage.encodeReply(id, () -> state, invalid -> fail(invalid.toString())));
+        assertEquals(655, bounded.getString("message").length());
+        assertNull(bounded.optJSONObject("theme"));
     }
 
     @Test public void decodesCarImageChunkRequestAndEncodesBoundedReply() throws Exception {

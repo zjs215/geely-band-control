@@ -17,6 +17,7 @@
             android:value="false" />
         <activity
             android:name=".WatchActivity"
+            android:configChanges="uiMode"
             android:exported="true"
             android:launchMode="singleTop"
             android:taskAffinity="">

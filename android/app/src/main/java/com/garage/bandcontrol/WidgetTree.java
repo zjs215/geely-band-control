@@ -26,7 +26,7 @@ final class WidgetTree {
     static final String LOCKED = "locked";
     static final String UNLOCKED = "unlocked";
     record Button(View view, String slot, String fingerprint, Rect bounds, String label, String role,
-                  WidgetIcons.Match match, LynkWidgetIcons.Kind lynkIcon) {}
+                  WidgetIcons.Match match, LynkWidgetIcons.Kind lynkIcon, LynkWidgetIcons.Kind lynkDisplayIcon) {}
     record OfficialConfirmation(View accept, View cancel, String title) {}
 
     final BrandConfig config;
@@ -54,6 +54,10 @@ final class WidgetTree {
 
     boolean slotLoading(View root, String slotName) {
         return slotLoading(named(root, slotName));
+    }
+
+    boolean slotVisible(View root, String slotName) {
+        return named(root, slotName) != null;
     }
 
     private boolean slotLoading(View slot) {
@@ -120,12 +124,14 @@ final class WidgetTree {
 
         View settings = named(root, config.settings);
         if (clickable(settings, root)) {
-            buttons.add(new Button(settings, config.settings, "", bounds(root, settings), "配置", config.settings, null, null));
+            buttons.add(new Button(settings, config.settings, "", bounds(root, settings), "配置", config.settings,
+                    null, null, null));
         }
         View refresh = loading(root) ? null : unique(root,
                 view -> config.refreshViews.contains(resource(view)) && clickable(view, root));
         if (refresh != null) {
-            buttons.add(new Button(refresh, config.refresh, "", bounds(root, refresh), "刷新车况", config.refresh, null, null));
+            buttons.add(new Button(refresh, config.refresh, "", bounds(root, refresh), "刷新车况", config.refresh,
+                    null, null, null));
         }
 
         if (!controlsReady && config.slotMode == BrandConfig.SlotMode.DYNAMIC) return buttons;
@@ -147,7 +153,10 @@ final class WidgetTree {
                 String identity = providerVersion + "|" + slotName + "|" + resource(click) + "|" + label;
                 LynkWidgetIcons.Kind lynkIcon = lynkIcons == null || loading(root)
                         ? null : lynkIcons.identify(image, label, providerVersion);
-                buttons.add(new Button(click, slotName, fingerprint(icon, identity), bounds(root, click), label, "", match, lynkIcon));
+                LynkWidgetIcons.Kind displayIcon = lynkIcons != null && providerVersion.startsWith(LynkWidgetIcons.VERSION_431)
+                        ? lynkIcons.identifyForDisplay(image, label, providerVersion) : lynkIcon;
+                buttons.add(new Button(click, slotName, fingerprint(icon, identity), bounds(root, click), label, "",
+                        match, lynkIcon, displayIcon));
             } catch (RuntimeException unsupportedDrawable) {
                 // A failed icon render leaves this slot unavailable until its identity can be checked.
             }

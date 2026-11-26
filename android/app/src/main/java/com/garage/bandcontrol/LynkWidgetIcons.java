@@ -16,6 +16,7 @@ import java.util.WeakHashMap;
 
 /** Identifies the displayed icon. It does not establish the vehicle's state or the next action. */
 final class LynkWidgetIcons {
+    static final String VERSION_431 = "403101550:";
     enum Kind {
         LOCK("车锁", ""),
         CLOSED_LOCK("车锁", "闭锁图标"),
@@ -50,8 +51,15 @@ final class LynkWidgetIcons {
     private final Map<Resources, Catalog> catalogs = new WeakHashMap<>();
 
     Kind identify(ImageView image, String description, String providerVersion) {
-        Kind described = fromDescription(description);
-        Kind drawn = fromIcon(image, providerVersion);
+        Kind drawn = providerVersion.startsWith("402090100:") ? fromIcon(image, providerVersion) : null;
+        return match(fromDescription(description), drawn);
+    }
+
+    Kind identifyForDisplay(ImageView image, String description, String providerVersion) {
+        return match(fromDescription(description), fromIcon(image, providerVersion));
+    }
+
+    private static Kind match(Kind described, Kind drawn) {
         if (described == null) return drawn;
         if (drawn == null) return described;
         if (!described.category.equals(drawn.category)) return null;
@@ -78,8 +86,6 @@ final class LynkWidgetIcons {
     }
 
     private Kind fromIcon(ImageView image, String providerVersion) {
-        // The resource names and icon shapes were inspected in the official 4.2.9 APK.
-        if (!providerVersion.startsWith("402090100:")) return null;
         Drawable current = image.getDrawable().getCurrent();
         if (!(current instanceof BitmapDrawable drawable)) return null;
         BitSet silhouette = silhouette(drawable.getBitmap());

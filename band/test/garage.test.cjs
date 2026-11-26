@@ -25,6 +25,10 @@ function start(options = {}) {
   let timerId = 0
   const timers = new Map()
   const runtime = {
+    ...(options.now === undefined ? {} : { Date: class extends Date {
+      constructor(...args) { super(...(args.length ? args : [options.now + clock])) }
+      static now() { return options.now + clock }
+    } }),
     $app_require$(name) {
       if (!(name in native)) throw new Error('Unknown native module ' + name)
       return native[name]
@@ -171,11 +175,15 @@ test('window controls follow the phone directions and prepare the action shown o
   link.page.select('window_open')
   assert.equal(link.sent.length, before)
   assert.match(link.page.toastText, /未显示关窗方向/)
+  link.page.setWatchPage(1)
   link.page.select('window_vent')
   assert.equal(link.sent.at(-1).data.controlDirection, 'close')
   const token = 'b'.repeat(36)
   link.reply({ ...closeAction, status: 'confirm', action: 'window_vent', message: '关闭车窗', token })
   assert.equal(link.page.confirmTitle, '关闭车窗')
+  assert.equal(link.page.themeConfirmIcon, '/common/confirm-icons/night/window_vent.png')
+  link.page.setWatchPage(0)
+  assert.equal(link.page.watchPage, 1)
   link.page.execute()
   assert.equal(link.sent.at(-1).data.type, 'execute')
   assert.equal(link.sent.at(-1).data.token, token)
@@ -295,7 +303,9 @@ test('only a failed read send retries after 500 ms with the original request ID'
     second.fail()
     assert.equal(link.page.modeLabel, '离线')
     link.advance(501)
-    assert.equal(link.sent.length, count + 1)
+    assert.equal(link.sent.length, count + 2)
+    assert.equal(link.types().at(-1), 'hello')
+    assert.equal(link.sent.filter(message => message.data.id === first.data.id).length, 2)
   }
 })
 
@@ -309,6 +319,70 @@ test('a reply, a superseding request, or leaving the screen cancels a pending re
     link.advance(500)
     assert.equal(link.sent.length, count)
   }
+})
+
+test('Galaxy and Lynk keep loading and unknown slots in place and cannot prepare them', () => {
+  for (const [brand, ids] of [
+    ['GALAXY', ['climate', 'heat', 'trunk', 'find']],
+    ['LYNKCO', ['lynk_unlock', 'lynk_window', 'lynk_kjck', 'lynk_ccqk']]
+  ]) {
+    const link = start()
+    link.hello({ brand })
+    link.reply({ brand, mapped: ids, available: ids, controlStates: { [ids[0]]: 'loading', [ids[1]]: 'unknown' } })
+    const tiles = link.page.displayRows.flatMap(row => [row.first, row.second]).filter(tile => tile.id)
+    assert.deepEqual(Array.from(tiles, tile => tile.id), ids)
+    assert.deepEqual(Array.from(tiles.slice(0, 2), tile => tile.hint), ['加载中', '状态未知'])
+    const count = link.sent.length
+    link.page.select(ids[0])
+    link.page.select(ids[1])
+    assert.equal(link.sent.length, count)
+    assert.equal(link.page.toastText, '状态未知')
+  }
+})
+
+test('a compact execution acknowledgment shows the result while a separate request reads vehicle state', () => {
+  for (const status of ['dispatched', 'unknown']) {
+    const link = start()
+    link.hello({ features: ['confirm', 'cancel', 'refresh', 'compact_execute_ack'] })
+    link.reply()
+    confirmClimate(link)
+    link.page.execute()
+    const { id, compactAck } = link.sent.at(-1).data
+    assert.equal(compactAck, true)
+    link.receive({ v: 1, type: 'execute_ack', id: 'other-id', status })
+    assert.equal(link.page.pending.id, id)
+    link.receive({ v: 1, type: 'execute_ack', id, status })
+    assert.deepEqual(link.types().slice(-2), ['execute', 'status'])
+    assert.equal(link.page.controlPending, true)
+    const receipt = link.page.toastText
+    assert.match(receipt, status === 'dispatched' ? /指令已发送/ : /结果待核对/)
+    link.reply()
+    assert.equal(link.page.toastText, receipt)
+  }
+})
+
+test('disconnect reconnects immediately, backs off, and clears the old confirmation', () => {
+  const link = start()
+  link.hello()
+  link.reply()
+  confirmClimate(link)
+  assert.ok(link.page.confirmToken)
+  link.connection.onclose()
+  assert.equal(link.page.confirmToken, '')
+  link.advance(0)
+  assert.equal(link.types().at(-1), 'hello')
+  link.connection.onclose()
+  const count = link.sent.length
+  link.advance(999)
+  assert.equal(link.sent.length, count)
+  link.advance(1)
+  assert.equal(link.types().at(-1), 'hello')
+  link.receive({ v: 1, type: 'hello-reply', id: link.sent.at(-1).data.id,
+    protocol: 1, phoneApp: manifest.versionName, features: ['confirm', 'cancel'] })
+  assert.equal(link.types().at(-1), 'status')
+  link.reply()
+  assert.equal(link.page.reconnectAttempt, 0)
+  assert.ok(!link.types().includes('execute'))
 })
 
 test('prepare, execute, and cancel each get one attempt on send failure or exception', () => {
@@ -328,7 +402,7 @@ test('prepare, execute, and cancel each get one attempt on send failure or excep
       assert.equal(failed.data.type, type)
       if (!throwInstead) failed.fail()
       assert.equal(link.page.modeLabel, '离线')
-      if (type === 'execute') assert.match(link.page.toastText, /结果未知/)
+      if (type === 'execute') assert.match(link.page.toastText, /结果待核对/)
       link.advance(500)
       assert.equal(link.types().filter(sentType => sentType === type).length, 1)
     }
@@ -347,9 +421,9 @@ test('read response deadlines stay at 8 and 13 seconds and do not trigger a rese
     link.advance(timeout - 1)
     assert.equal(link.page.pending.type, type)
     link.advance(1)
-    assert.equal(link.page.pending, null)
+    assert.equal(link.page.pending.type, 'hello')
     assert.equal(link.page.modeLabel, '离线')
-    assert.equal(link.sent.length, count)
+    assert.equal(link.sent.length, count + 1)
   }
 })
 
@@ -387,13 +461,13 @@ test('the event ring restores history, caps persistence at 20, and shows the lat
   writes.shift()()
   assert.equal(stored.length, 20)
   assert.deepEqual(stored.slice(-3).map(entry => [entry.event, entry.id]), [
-    ['send', id], ['timeout', id], ['disconnect', id]
+    ['timeout', id], ['disconnect', id], ['send', link.sent.at(-1).data.id]
   ])
   assert.ok(stored.every(entry => typeof entry.ts === 'number' && !('token' in entry)))
   link.page.openSettings()
   assert.equal(link.page.settingsOpen, true)
   assert.equal(link.page.diagnosticLines.length, 3)
-  assert.match(link.page.diagnosticLines[0], /disconnect status timeout/)
+  assert.match(link.page.diagnosticLines[1], /disconnect status timeout/)
   assert.equal(link.page.onBackPress(), true)
   assert.equal(link.page.settingsOpen, false)
 })
@@ -432,7 +506,7 @@ test('error-only envelopes report their cause immediately, including for execute
     assert.equal(link.page.pending, null)
     assert.equal(link.page.modeLabel, '离线')
     assert.match(link.page.toastText, message)
-    assert.match(link.page.toastText, /结果未知/)
+    assert.match(link.page.toastText, /结果待核对/)
     assert.equal(link.page.events.at(-2).detail, error)
     assert.equal(link.page.events.at(-1).event, 'disconnect')
   }
@@ -558,7 +632,7 @@ test('a missing vibrator leaves confirmations and dispatch usable', () => {
   assert.equal(link.page.vibrator, null)
 })
 
-test('layout profile adapts to Band 10 capsule, circular Watch 5, and falls back to Band 10 Pro rect', () => {
+test('layout keeps two columns for round and square displays and one for tall displays', () => {
   const capsule = start({
     native: {
       '@app-module/system.device': {
@@ -612,26 +686,21 @@ test('layout profile adapts to Band 10 capsule, circular Watch 5, and falls back
     assert.equal(circle.page.watchPage, 0)
   }
 
-  for (const native of [
-    {},
-    { '@app-module/system.device': { getInfo({ fail }) { fail('unavailable', 200) } } },
-    { '@app-module/system.device': { getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) } } }
+  for (const [width, height, profile, count] of [
+    [400, 400, 'square', 2], [336, 396, 'rect', 4], [336, 480, 'rect', 4], [192, 490, 'capsule', 4]
   ]) {
-    const rect = start({ native })
-    assert.equal(rect.page.layoutProfile, 'rect')
-    assert.equal(rect.page.rectTwoPage, false)
-    assert.equal(rect.page.useTwoPageShell, false)
-    assert.equal(rect.page.ui.range, 'range')
-    assert.equal(rect.page.watchHomeUi.mileagePage, 'watch-page watch-mileage-page watch-mileage-page-tall')
-    assert.equal(rect.page.watchControlsUi.controlsPage, 'watch-page watch-controls-page watch-controls-page-tall')
-    assert.equal(rect.page.watchControlsUi.pager, 'watch-pager watch-pager-tall')
-    rect.hello()
-    rect.reply({ mapped: ['lock', 'climate', 'window_vent', 'trunk'], available: ['climate'] })
-    assert.equal(rect.page.displayRows.length, 2)
-    assert.equal(rect.page.displayRows[0].first.labelStyle, 'tile-label')
-    assert.equal(rect.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-grid watch-orb-grid-tall')
-    assert.equal(rect.page.displayRows[0].first.watchCellStyle, 'watch-cell watch-cell-grid watch-cell-grid-tall')
+    const link = start({ native: {
+      '@app-module/system.device': { getInfo({ success }) { success({ screenWidth: width, screenHeight: height, screenShape: 'rect' }) } }
+    } })
+    assert.equal(link.page.layoutProfile, profile)
+    assert.equal(link.page.useTwoPageShell, profile === 'square')
+    link.hello()
+    const mapped = ['lock', 'climate', 'window_vent', 'trunk']
+    link.reply({ mapped, available: ['climate'] })
+    assert.equal(link.page.displayRows.length, count)
+    assert.deepEqual(Array.from(link.page.displayRows).flatMap(row => [row.first.id, row.second.id].filter(Boolean)), mapped)
   }
+  assert.equal(start().page.layoutProfile, 'square')
 })
 
 test('rect profile can toggle 2-page watch mode in Settings and persists across reopen', () => {
@@ -640,8 +709,10 @@ test('rect profile can toggle 2-page watch mode in Settings and persists across 
     getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) }
   }
   const sourceUx = readFileSync(path.join(__dirname, '../src/pages/garage/index.ux'), 'utf8')
-  assert.match(sourceUx, /<div class="\{\{ ui\.hapticsSetting \}\}" if="\{\{ layoutProfile === 'rect' \}\}">[\s\S]*双屏显示/)
-  assert.match(sourceUx, /if="\{\{ !confirmTitle && !settingsOpen && useTwoPageShell \}\}"/)
+  assert.match(sourceUx, /if="\{\{ canChangeDisplay \}\}">[\s\S]*双屏显示/)
+  assert.match(sourceUx, /if="\{\{ homeLayoutReady && !settingsOpen && useTwoPageShell \}\}"/)
+  assert.match(sourceUx, /class="confirm-overlay" if="\{\{ confirmTitle \}\}"/)
+  assert.match(sourceUx, /@click="execute">确认<\/text>\s*<text[^>]+@click="cancel">取消<\/text>/)
 
   const link = start(fixture)
   assert.equal(link.page.layoutProfile, 'rect')
@@ -649,13 +720,21 @@ test('rect profile can toggle 2-page watch mode in Settings and persists across 
   assert.equal(link.page.useTwoPageShell, false)
   link.hello()
   link.reply({ mapped: ['lock', 'climate'], available: ['climate'] })
-  assert.equal(link.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-pair watch-orb-pair-tall')
+  assert.equal(link.page.displayRows.length, 2)
+  assert.match(link.page.displayRows[0].first.style, /tile-rect/)
+  assert.match(link.page.displayRows[0].first.watchCellStyle, /watch-cell-single watch-cell-rect/)
+  assert.equal(link.page.displayRows[0].first.watchCellCopyStyle, 'watch-control-copy watch-control-copy-single')
+  assert.equal(link.page.displayRows[1].first.watchCellCopyStyle, link.page.displayRows[0].first.watchCellCopyStyle)
+  assert.equal(link.page.displayRows[0].second.id, '')
+  assert.equal(link.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-single')
 
   link.page.openSettings()
   link.page.changeRectTwoPage({ checked: true })
   assert.equal(link.page.rectTwoPage, true)
   assert.equal(link.page.useTwoPageShell, true)
-  assert.equal(fixture.values.get('rect-two-page'), 'on')
+  assert.equal(link.page.displayRows.length, 2)
+  assert.equal(link.page.displayRows[1].first.id, 'climate')
+  assert.equal(JSON.parse(fixture.values.get('rect-two-page')).twoPage, true)
   link.page.closeSettings()
 
   link.page.onWatchPageChange({ index: 1 })
@@ -675,7 +754,184 @@ test('rect profile can toggle 2-page watch mode in Settings and persists across 
   assert.equal(reopened.page.rectTwoPage, false)
   assert.equal(reopened.page.useTwoPageShell, false)
   assert.equal(reopened.page.watchPage, 0)
-  assert.equal(fixture.values.get('rect-two-page'), 'off')
+  assert.equal(JSON.parse(fixture.values.get('rect-two-page')).twoPage, false)
+})
+
+test('startup waits for the saved tall-screen mode before exposing the home layout', () => {
+  let receiveDevice
+  let receiveDisplay
+  const link = start({ native: {
+    '@app-module/system.device': { getInfo({ success }) { receiveDevice = success } },
+    '@app-module/system.storage': {
+      get({ key, success }) {
+        if (key === 'rect-two-page') receiveDisplay = success
+        else success('')
+      },
+      set() {}
+    }
+  } })
+  assert.equal(link.page.homeLayoutReady, false)
+  receiveDevice({ screenWidth: 336, screenHeight: 396, screenShape: 'rect' })
+  assert.equal(link.page.homeLayoutReady, false)
+  receiveDisplay('on')
+  assert.equal(link.page.homeLayoutReady, true)
+  assert.equal(link.page.useTwoPageShell, true)
+  assert.match(link.page.watchControlsUi.settingsPill, /watch-settings-pill-short/)
+  assert.equal(link.page.total, '—')
+  link.hello()
+  link.reply({ vehicle: { totalKm: 298, updatedAt: 1795482900000 } })
+  assert.equal(link.page.total, '298')
+  assert.equal(link.page.useTwoPageShell, true)
+  assert.match(link.page.displayRows[0].first.watchCellStyle, /watch-cell-rect-short/)
+})
+
+test('phone and rectangular band synchronize display choices without replacing a newer phone change', () => {
+  const fixture = hapticsFixture()
+  fixture.values.set('rect-two-page', 'on')
+  fixture.native['@app-module/system.device'] = {
+    getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) }
+  }
+  const link = start(fixture)
+  link.hello({ features: ['confirm', 'band_display'], bandDisplay: { twoPage: false, revision: 0 } })
+  assert.equal(link.sent.at(-1).data.bandDisplay.twoPage, true)
+  assert.equal(link.sent.at(-1).data.bandDisplay.revision, 0)
+  link.reply({ bandDisplay: { twoPage: true, revision: 1 } })
+  assert.equal(link.page.useTwoPageShell, true)
+  link.page.syncStatus()
+  link.reply({ bandDisplay: { twoPage: false, revision: 2 } })
+  assert.equal(link.page.useTwoPageShell, false)
+
+  link.page.changeRectTwoPage({ checked: true })
+  assert.equal(link.sent.at(-1).data.bandDisplay.revision, 2)
+  link.page.changeRectTwoPage({ checked: false })
+  link.reply({ bandDisplay: { twoPage: true, revision: 3 } })
+  assert.equal(link.page.useTwoPageShell, false)
+  link.page.syncStatus()
+  assert.equal(link.sent.at(-1).data.bandDisplay.revision, 3)
+  assert.equal(link.sent.at(-1).data.bandDisplay.twoPage, false)
+  link.reply({ bandDisplay: { twoPage: false, revision: 4 } })
+  assert.deepEqual(JSON.parse(fixture.values.get('rect-two-page')), { twoPage: false, revision: 4, pending: false })
+})
+
+test('second-page upward pull refreshes once on release and leaves down gestures to the pager', () => {
+  const link = start()
+  link.hello()
+  link.reply()
+  const touch = (x, y, identifier = 0) => ({ clientX: x, clientY: y, identifier })
+  const begin = () => link.page.startControlsPull({ touches: [touch(160, 260)] })
+  const move = (x, y) => link.page.moveControlsPull({ touches: [touch(x, y)] })
+  const end = (x, y) => link.page.endControlsPull({ changedTouches: [touch(x, y)] })
+  const before = link.sent.length
+  begin()
+  end(160, 180)
+  link.page.setWatchPage(1)
+  begin()
+  move(163, 230)
+  assert.equal(link.page.controlsPullText, '上拉刷新')
+  assert.ok(link.page.controlsPullOffset < 0 && link.page.controlsPullProgress > 0)
+  end(163, 230)
+  begin()
+  end(160, 334)
+  begin()
+  end(260, 180)
+  assert.equal(link.sent.length, before)
+  begin()
+  move(164, 184)
+  assert.equal(link.page.controlsPullText, '松手刷新')
+  assert.equal(link.page.controlsPullProgress, 100)
+  assert.deepEqual(JSON.parse(link.page.controlsPullTransform), { translateY: '-19px' })
+  assert.equal(link.sent.length, before)
+  end(164, 184)
+  assert.equal(link.page.watchPage, 1)
+  assert.equal(link.sent.at(-1).data.type, 'refresh')
+  assert.equal(link.page.controlsPullText, '')
+  assert.equal(link.page.controlsPullOffset, 0)
+  assert.deepEqual(JSON.parse(link.page.controlsPullTransform), { translateY: '0px' })
+  assert.equal(link.page.refreshing, true)
+  end(164, 184)
+  assert.equal(link.sent.length, before + 1)
+  link.reply()
+  assert.equal(link.page.refreshing, false)
+  begin()
+  move(164, 184)
+  link.page.onWatchPageChange({ index: 0 })
+  end(164, 184)
+  assert.equal(link.sent.length, before + 1)
+})
+
+test('capsule uses phone themes without a local editor and keeps the theme behind the controls', () => {
+  const fixture = hapticsFixture()
+  fixture.native['@app-module/system.device'] = {
+    getInfo({ success }) { success({ screenWidth: 212, screenHeight: 520, screenShape: 'pill-shaped' }) }
+  }
+  const link = start(fixture)
+  const fixed = { themeId: 'coast', mode: 'fixed', variant: 'day', dayStartMinute: 360, nightStartMinute: 1080 }
+  link.hello({ features: ['confirm', 'band_display'], bandDisplay: { twoPage: true, revision: 1 }, theme: fixed })
+  link.reply()
+  link.page.openThemeEditor()
+  assert.equal(link.page.themeEditorOpen, false)
+  assert.equal(link.page.useTwoPageShell, true)
+  assert.match(link.page.themeArt, /capsule\/coast-day\.jpg$/)
+  assert.equal(link.page.themeDay, true)
+  link.page.syncStatus()
+  link.reply({ theme: { ...fixed, variant: 'night' } })
+  assert.match(link.page.themeArt, /capsule\/coast-night\.jpg$/)
+  assert.equal(link.page.themeDay, false)
+  link.page.receiveTheme({ ...fixed, themeId: 'alpine', variant: 'night' })
+  assert.match(link.page.themeArt, /capsule\/alpine-night\.jpg$/)
+  assert.equal(link.page.themeDay, false)
+  const source = readFileSync(path.join(__dirname, '../src/pages/garage/index.ux'), 'utf8')
+  assert.match(source, /<stack class="page">\s*<stack class="theme-layer">[\s\S]*?<\/stack>\s*<div class="home-layout-pending"/)
+  assert.doesNotMatch(source, /theme-scrim|theme-active-(day|night)/)
+})
+
+test('themes switch at a local clock boundary and persist an independent fixed choice offline', () => {
+  const fixture = hapticsFixture()
+  fixture.now = new Date(2026, 10, 26, 17, 59, 59).getTime()
+  const link = start(fixture)
+  const phone = { themeId: 'sky', mode: 'schedule', variant: 'day', dayStartMinute: 360, nightStartMinute: 1080 }
+  link.hello({ theme: phone })
+  link.reply()
+  assert.match(link.page.themeArt, /square\/sky-day\.jpg$/)
+  link.advance(900)
+  assert.match(link.page.themeArt, /square\/sky-night\.jpg$/)
+
+  link.page.openSettings()
+  link.page.openThemeEditor()
+  assert.equal(link.page.themeDraftChoice, 0)
+  link.page.changeThemeChoice({ newSelected: 3 })
+  assert.equal(link.page.themeTimesExpanded, false)
+  link.page.toggleThemeTimes()
+  assert.equal(link.page.themeTimesExpanded, true)
+  link.page.changeThemeNight({ hour: '06', minute: '00' })
+  link.page.saveThemeEditor()
+  assert.ok(link.page.themeEditorError)
+  link.page.changeThemeDay({ hour: '23', minute: '30' })
+  link.page.changeThemeNight({ hour: '06', minute: '15' })
+  link.page.saveThemeEditor()
+  link.page.refreshTheme(new Date(2026, 10, 27, 5, 59))
+  assert.match(link.page.themeArt, /ridge-day\.jpg$/)
+  link.page.refreshTheme(new Date(2026, 10, 27, 6, 15))
+  assert.match(link.page.themeArt, /ridge-night\.jpg$/)
+
+  link.page.openThemeEditor()
+  link.page.changeThemeMode({ newSelected: 2 })
+  assert.equal(link.page.themeTimesExpanded, false)
+  link.page.saveThemeEditor()
+  link.page.receiveTheme({ ...phone, themeId: 'city' })
+  assert.match(link.page.themeArt, /ridge-night\.jpg$/)
+  assert.equal(link.page.themeTimer, null)
+  const reopened = start(fixture)
+  assert.match(reopened.page.themeArt, /ridge-night\.jpg$/)
+  reopened.page.openSettings()
+  reopened.page.openThemeEditor()
+  reopened.page.changeThemeChoice({ newSelected: 0 })
+  reopened.page.saveThemeEditor()
+  assert.match(reopened.page.themeArt, /city-day\.jpg$/)
+  reopened.page.receiveTheme({ ...phone, themeId: 'unknown' })
+  assert.match(reopened.page.themeArt, /city-day\.jpg$/)
+  reopened.page.onHide()
+  assert.equal(reopened.page.themeTimer, null)
 })
 
 test('car image sync pulls chunks when hash changes, caches via system.file, and yields to user controls', () => {
@@ -777,6 +1033,40 @@ test('startup loads cached car image directly without flashing the bundled defau
   assert.equal(lynk.page.carImageSrc, 'internal://files/car_lynk888.png')
 })
 
+test('both home layouts keep a vehicle image when themes change and recover a broken cache', () => {
+  const fallback = '/common/images/starshine-8.png'
+  const cached = 'internal://files/car_theme888.png'
+  const fixture = hapticsFixture()
+  fixture.values.set('vehicle-snapshot', JSON.stringify({ brand: 'LYNKCO', updatedAt: 1700000000000, totalKm: 207 }))
+  fixture.values.set('car-image-cache', JSON.stringify({ hash: 'theme888', uri: cached, brand: 'LYNKCO' }))
+  fixture.native['@app-module/system.device'] = {
+    getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) }
+  }
+  const link = start(fixture)
+  const theme = { themeId: 'coast', mode: 'fixed', variant: 'day', dayStartMinute: 360, nightStartMinute: 1080 }
+  link.hello({ brand: 'LYNKCO', features: ['confirm', 'car_image'], theme })
+  link.reply({ brand: 'LYNKCO' })
+  assert.equal(link.page.displayCarImage, cached)
+  assert.equal(link.page.themeTileClass, ' theme-tile-day')
+  link.page.changeRectTwoPage({ checked: true })
+  link.page.receiveTheme({ ...theme, themeId: 'alpine', variant: 'night' })
+  assert.equal(link.page.displayCarImage, cached)
+  assert.equal(link.page.themeTileClass, ' theme-tile-night')
+  link.page.onCarImageError()
+  assert.equal(link.page.displayCarImage, fallback)
+  link.page.syncStatus()
+  link.reply({ brand: 'LYNKCO', carImageHash: 'theme888', carImageChunks: 1 })
+  assert.equal(link.sent.at(-1).data.type, 'car_image')
+  assert.equal(link.sent.at(-1).data.hash, 'theme888')
+
+  const waiting = start({
+    native: { '@app-module/system.storage': { get() {}, set() {} } }
+  })
+  assert.equal(waiting.page.displayCarImage, fallback)
+  waiting.page.receiveTheme(theme)
+  assert.equal(waiting.page.displayCarImage, fallback)
+})
+
 test('vehicle name defaults to generic label, syncs from phone, persists in snapshot, and circular orbs adapt to count and active state', () => {
   const storage = new Map()
   const circle = start({
@@ -841,6 +1131,8 @@ test('vehicle name defaults to generic label, syncs from phone, persists in snap
 
 test('energy readings fall back to battery percentage when kilometers are unavailable', () => {
   const link = start()
+  const breakdown = () => Array.from(link.page.rangeBreakdown, ({ id, value }) => [id, value])
+  assert.deepEqual(breakdown(), [['electric', '—\u00a0km'], ['fuel', '—\u00a0km']])
   link.hello()
   link.reply({
     vehicle: { totalKm: 643, electricPercent: 97, fuelKm: 517, fuelPercent: 48, motion: '已驻车', updatedAt: 1700000000000, updatedLabel: '20:20' }
@@ -851,7 +1143,8 @@ test('energy readings fall back to battery percentage when kilometers are unavai
   assert.equal(link.page.electricUnit, '%')
   assert.equal(link.page.fuel, '517')
   assert.equal(link.page.fuelUnit, '\u00a0km')
-  assert.equal(link.page.watchSubrange, '电 97% · 油 517\u00a0km')
+  assert.deepEqual(breakdown(), [['electric', '97%'], ['fuel', '517\u00a0km']])
+  assert.deepEqual(Array.from(link.page.rangeBreakdown, reading => reading.percent), [97, 48])
 
   link.page.syncStatus()
   link.reply({
@@ -861,7 +1154,8 @@ test('energy readings fall back to battery percentage when kilometers are unavai
   assert.equal(link.page.totalUnit, '%')
   assert.equal(link.page.electric, '85')
   assert.equal(link.page.electricUnit, '%')
-  assert.equal(link.page.watchSubrange, '电 85%')
+  assert.deepEqual(breakdown(), [['electric', '85%']])
+  assert.equal(link.page.rangeBreakdown[0].percent, 85)
 })
 
 
@@ -977,5 +1271,5 @@ test('configurable Lynk slot and owner mark contracts remain separate from Galax
   assert.ok(mark.includes("this.fingerprint.equals(fingerprint)"))
   assert.ok(mark.includes("this.description.equals(description)"))
   assert.doesNotMatch(mark, /car_wg_funicon_/)
-  assert.ok(source("GalaxyWidgets.java").includes("current.stream().noneMatch(binding::matches)"))
+  assert.ok(source("GalaxyWidgets.java").includes("button.slot().equals(binding.slot()) && !binding.matches(button)"))
 })

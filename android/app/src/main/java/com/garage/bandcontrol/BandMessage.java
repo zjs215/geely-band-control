@@ -1,5 +1,7 @@
 package com.garage.bandcontrol;
 
+import com.garage.appearance.ThemeConfig;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -9,12 +11,18 @@ import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 record BandMessage(String id, String type, CarAction action, String token, ControlDirection direction,
-                   String imageHash, int imageIndex, String brand) {
+                   String imageHash, int imageIndex, String brand, BandDisplay bandDisplay, boolean compactAck) {
+    BandMessage(String id, String type, CarAction action, String token, ControlDirection direction,
+                String imageHash, int imageIndex, String brand) {
+        this(id, type, action, token, direction, imageHash, imageIndex, brand, null, false);
+    }
+
     BandMessage(String id, String type, CarAction action, String token, ControlDirection direction) {
         this(id, type, action, token, direction, "", -1, "");
     }
 
     static final int MAX_BYTES = 2048;
+    static final String COMPACT_EXECUTE_ACK = "compact_execute_ack";
     private static final Pattern ID = Pattern.compile("[a-zA-Z0-9_-]{6,48}");
     private static final Pattern HASH = Pattern.compile("[a-zA-Z0-9_-]{6,32}");
     private static final int VERSION = 1;
@@ -33,7 +41,9 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
         CarAction action = CarAction.fromId(input.optString("action"));
         String token = input.optString("token");
         switch (type) {
-            case "hello", "status", "refresh": return new BandMessage(id, type, null, "", null);
+            case "hello", "refresh": return new BandMessage(id, type, null, "", null);
+            case "status": return new BandMessage(id, type, null, "", null, "", -1, "",
+                    BandDisplay.parse(input.optJSONObject("bandDisplay")), false);
             case "prepare":
                 if (action == null) return null;
                 String desired = input.optString("controlDirection");
@@ -53,7 +63,9 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
                 if (!desired.isEmpty() && !action.acceptsDirection(direction)) return null;
                 return new BandMessage(id, type, action, "", direction, "", -1, input.optString("brand"));
             case "execute":
-                return action == null || token.length() != 36 ? null : new BandMessage(id, type, action, token, null);
+                return action == null || token.length() != 36 ? null
+                        : new BandMessage(id, type, action, token, null, "", -1, "", null,
+                        Boolean.TRUE.equals(input.opt("compactAck")));
             case "cancel": return token.length() != 36 ? null : new BandMessage(id, type, null, token, null);
             case "car_image":
                 String hash = input.optString("hash");
@@ -74,19 +86,42 @@ record BandMessage(String id, String type, CarAction action, String token, Contr
                 .put("hash", hash).put("index", index).put("total", total).put("data", data);
     }
 
+    static JSONObject executeAck(String id, String status, String message) throws JSONException {
+        return envelope(id, "execute_ack").put("status", status).put("message", message);
+    }
+
     static JSONObject helloReply(String id, String phoneApp) throws JSONException {
         return envelope(id, "hello-reply").put("phoneApp", phoneApp).put("protocol", VERSION)
-                .put("features", new JSONArray().put("confirm").put("cancel").put("refresh").put("car_image"));
+                .put("features", new JSONArray().put("confirm").put("cancel").put("refresh").put("car_image")
+                        .put(ThemeConfig.FEATURE).put(BandDisplay.FEATURE));
     }
 
     static String encodeReply(String id, ReplyBuilder builder, Consumer<Exception> onError) {
         try {
-            String text = builder.build().toString();
-            return text.getBytes(StandardCharsets.UTF_8).length <= MAX_BYTES ? text : errorReply(id, "too_large");
+            JSONObject reply = builder.build();
+            String text = reply.toString();
+            if (fits(text)) return text;
+            if (reply.remove("theme") != null) {
+                text = reply.toString();
+                if (fits(text)) return text;
+            }
+            if (reply.remove("bandDisplay") != null) {
+                text = reply.toString();
+                if (fits(text)) return text;
+            }
+            if (reply.remove("controlStates") != null) {
+                text = reply.toString();
+                if (fits(text)) return text;
+            }
+            return errorReply(id, "too_large");
         } catch (JSONException | RuntimeException invalid) {
             onError.accept(invalid);
             return errorReply(id, "internal");
         }
+    }
+
+    private static boolean fits(String text) {
+        return text.getBytes(StandardCharsets.UTF_8).length <= MAX_BYTES;
     }
 
     private static String errorReply(String id, String error) {

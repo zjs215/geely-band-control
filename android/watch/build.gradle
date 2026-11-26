@@ -18,8 +18,8 @@ android {
         applicationId 'com.garage.bandcontrol'
         minSdk 28
         targetSdk 35
-        versionCode 34
-        versionName '0.1.33'
+        versionCode 44
+        versionName '0.2.7'
     }
 
     signingConfigs {
@@ -40,6 +40,8 @@ android {
         buildConfig = true
     }
     sourceSets {
+        main.java.srcDir '../shared/src/main/java'
+        main.assets.srcDir '../shared/src/main/assets'
         main.assets.srcDirs += ['../../band/src/common/images']
         def localRes = new File(workspace, '.local/android-res')
         if (localRes.isDirectory()) {

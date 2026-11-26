@@ -1,7 +1,8 @@
-export const DEFAULT_LAYOUT = 'rect'
+export const DEFAULT_LAYOUT = 'square'
 
 const PROFILES = {
-  rect: { profile: 'rect', columns: 2, stackSplit: false, needsScroll: false },
+  square: { profile: 'square', columns: 2, stackSplit: false, needsScroll: false },
+  rect: { profile: 'rect', columns: 1, stackSplit: false, needsScroll: true },
   capsule: { profile: 'capsule', columns: 1, stackSplit: true, needsScroll: true },
   circle: { profile: 'circle', columns: 2, stackSplit: false, needsScroll: true }
 }
@@ -79,14 +80,14 @@ export function resolveLayoutProfile(info) {
   const width = Number(info.screenWidth || info.windowWidth) || 0
   const height = Number(info.screenHeight || info.windowHeight) || 0
   const shape = typeof info.screenShape === 'string' ? info.screenShape.toLowerCase() : ''
-  if (shape === 'circle' || (width >= 200 && height >= 200 && Math.abs(width - height) <= 32)) {
-    return 'circle'
+  if (shape === 'circle') return 'circle'
+  if (shape === 'pill-shaped' || shape === 'capsule') return 'capsule'
+  if (width <= 0 || height <= 0) return DEFAULT_LAYOUT
+  if (width <= 260 && height / width >= 1.65) return 'capsule'
+  if (Math.abs(width - height) <= Math.max(2, Math.min(width, height) / 50)) {
+    return !shape && width >= 200 ? 'circle' : 'square'
   }
-  if (shape === 'pill-shaped' || shape === 'capsule'
-      || (width > 0 && width <= 260 && (height >= 360 || height / width >= 1.8))) {
-    return 'capsule'
-  }
-  return DEFAULT_LAYOUT
+  return 'rect'
 }
 
 export function layoutConfig(profile) {
@@ -94,7 +95,7 @@ export function layoutConfig(profile) {
 }
 
 export function variantClass(base, profile) {
-  if (!profile || profile === DEFAULT_LAYOUT) return base
+  if (!profile || profile === 'square' || profile === 'rect') return base
   const suffix = '-' + profile
   return base + ' ' + base.split(' ').map(name => name + suffix).join(' ')
 }
@@ -122,14 +123,9 @@ const WATCH_HOME_BASES = {
   mileagePage: 'watch-page watch-mileage-page',
   heroHeader: 'watch-hero-header',
   model: 'watch-model',
-  rangeTap: 'watch-range-tap',
   hero: 'watch-hero',
   heroUnit: 'watch-hero-unit',
   heroUnitGhost: 'watch-hero-unit-ghost',
-  subrange: 'watch-subrange',
-  statusRow: 'watch-status-row',
-  statusText: 'watch-status-text',
-  refreshIcon: 'watch-refresh-icon',
   car: 'watch-car'
 }
 
@@ -147,8 +143,8 @@ const WATCH_CONTROLS_BASES = {
   pager: 'watch-pager'
 }
 
-export function watchHomeClasses(size, profile = 'circle') {
-  const tier = profile === 'rect'
+export function watchHomeClasses(size, profile = 'circle', shortRect = false) {
+  const tier = profile === 'rect' || profile === 'capsule'
     ? 'tall'
     : (size === 'compact' || size === 'large' ? size : 'standard')
   const result = {}
@@ -161,11 +157,12 @@ export function watchHomeClasses(size, profile = 'circle') {
       result[key] = base + ' ' + target + '-' + tier
     }
   }
+  if (shortRect) result.car += ' watch-car-short'
   return result
 }
 
-export function watchControlsClasses(profile = 'circle') {
-  const tall = profile === 'rect'
+export function watchControlsClasses(profile = 'circle', shortRect = false) {
+  const tall = profile === 'rect' || profile === 'capsule'
   const result = {}
   for (const key of Object.keys(WATCH_CONTROLS_BASES)) {
     const base = WATCH_CONTROLS_BASES[key]
@@ -176,6 +173,7 @@ export function watchControlsClasses(profile = 'circle') {
       result[key] = base + ' ' + target + '-tall'
     }
   }
+  if (shortRect) result.settingsPill += ' watch-settings-pill-short'
   return result
 }
 
@@ -187,7 +185,13 @@ export function detectDeviceProfile(onResolved) {
       return
     }
     device.getInfo({
-      success: info => onResolved(resolveLayoutProfile(info), resolveWatchHomeSize(info)),
+      success: info => {
+        const profile = resolveLayoutProfile(info)
+        const width = Number(info && (info.screenWidth || info.windowWidth))
+        const height = Number(info && (info.screenHeight || info.windowHeight))
+        const shortRect = profile === 'rect' && width > 0 && height > 0 && (height / width) * 336 < 440
+        onResolved(profile, resolveWatchHomeSize(info), shortRect)
+      },
       fail: () => onResolved(DEFAULT_LAYOUT, 'standard')
     })
   } catch (_) {

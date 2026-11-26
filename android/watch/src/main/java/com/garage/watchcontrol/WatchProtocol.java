@@ -13,6 +13,7 @@ import java.util.regex.Pattern;
 
 final class WatchProtocol {
     static final int PROTOCOL = 1;
+    static final String COMPACT_EXECUTE_ACK = "compact_execute_ack";
     static final int HOME_ACTIONS = 4;
     static final String MIN_PHONE_APP = "0.1.14";
     private static final Pattern VERSION_PATTERN = Pattern.compile("^(\\d+)\\.(\\d+)\\.(\\d+)$");
@@ -46,6 +47,11 @@ final class WatchProtocol {
     }
 
     private WatchProtocol() {}
+
+    static int controlColumns(boolean round, int width, int height) {
+        int shortSide = Math.min(width, height);
+        return round || Math.abs(width - height) <= Math.max(2, shortSide / 50) ? 2 : 1;
+    }
 
     record WatchScale(boolean roundScreen, int diameterPx, float density) {
         static final float DESIGN_WIDTH = 336.0f;
@@ -259,6 +265,27 @@ final class WatchProtocol {
         return controlLabel(action, null);
     }
 
+    static String controlHint(JSONObject states, String action) {
+        if (states == null) return "";
+        return switch (states.optString(action)) {
+            case "loading" -> "加载中";
+            case "unknown" -> "状态未知";
+            default -> "";
+        };
+    }
+
+    static long reconnectDelayMillis(int attempt) {
+        return attempt <= 0 ? 0 : 1000L << Math.min(4, attempt - 1);
+    }
+
+    static boolean isExecuteAck(JSONObject reply) {
+        return reply.optInt("v") == PROTOCOL && "execute_ack".equals(reply.optString("type"))
+                && switch (reply.optString("status")) {
+                    case "dispatched", "unknown", "blocked", "phone_confirm" -> true;
+                    default -> false;
+                };
+    }
+
     static String iconAsset(String action, String direction) {
         return iconAsset(action, direction, "");
     }
@@ -294,11 +321,23 @@ final class WatchProtocol {
         return value >= 0 && value <= 100 ? value : -1;
     }
 
-    static String energyDisplay(JSONObject vehicle, String kmKey, String percentKey) {
+    private static final String MISSING_ENERGY = "— km";
+
+    record EnergyBreakdown(String electric, String fuel) {
+        boolean showElectric() { return !MISSING_ENERGY.equals(electric) || MISSING_ENERGY.equals(fuel); }
+        boolean showFuel() { return !MISSING_ENERGY.equals(fuel) || MISSING_ENERGY.equals(electric); }
+    }
+
+    static EnergyBreakdown energyBreakdown(JSONObject vehicle) {
+        return new EnergyBreakdown(energyDisplay(vehicle, "electricKm", "electricPercent"),
+                energyDisplay(vehicle, "fuelKm", "fuelPercent"));
+    }
+
+    private static String energyDisplay(JSONObject vehicle, String kmKey, String percentKey) {
         String km = rangeText(vehicle, kmKey);
         if (!"—".equals(km)) return km + " km";
         int percent = validPercent(vehicle, percentKey);
-        return percent >= 0 ? percent + "%" : "— km";
+        return percent >= 0 ? percent + "%" : MISSING_ENERGY;
     }
 
     static String heroDisplay(JSONObject vehicle) {
@@ -320,21 +359,5 @@ final class WatchProtocol {
 
     static String heroUnit(String heroDisplay) {
         return heroDisplay != null && heroDisplay.endsWith(" km") ? " km" : "";
-    }
-
-    static String subrangeDisplay(JSONObject vehicle) {
-        String electric = energyPart("电 ", vehicle, "electricKm", "electricPercent");
-        String fuel = energyPart("油 ", vehicle, "fuelKm", "fuelPercent");
-        if (!electric.isEmpty() && !fuel.isEmpty()) return electric + " · " + fuel;
-        if (!electric.isEmpty()) return electric;
-        if (!fuel.isEmpty()) return fuel;
-        return "电 — km · 油 — km";
-    }
-
-    private static String energyPart(String prefix, JSONObject vehicle, String kmKey, String percentKey) {
-        String km = rangeText(vehicle, kmKey);
-        if (!"—".equals(km)) return prefix + km + " km";
-        int percent = validPercent(vehicle, percentKey);
-        return percent >= 0 ? prefix + percent + "%" : "";
     }
 }

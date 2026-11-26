@@ -12,6 +12,7 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Insets;
+import android.graphics.Outline;
 import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -21,20 +22,32 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
+import android.view.ViewOutlineProvider;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Switch;
+import com.garage.appearance.ThemeArtwork;
+import com.garage.appearance.ThemeClock;
+import com.garage.appearance.ThemeConfig;
+import com.garage.appearance.ThemeDialogs;
+import com.garage.appearance.ThemeEditor;
+import com.garage.appearance.ThemeStyles;
+
 import java.text.SimpleDateFormat;
+import java.time.ZonedDateTime;
 import java.util.Date;
 import java.util.Locale;
 
@@ -56,6 +69,7 @@ public final class MainActivity extends Activity {
     private static final String BIND_ID = "pendingWidgetId";
     private static final int NO_WIDGET = AppWidgetManager.INVALID_APPWIDGET_ID;
     private static final int LOG_VIEW_HEIGHT_DP = 220;
+    private static final int[][] BUTTON_STATES = {{-android.R.attr.state_enabled}, {android.R.attr.state_activated}, {}};
 
     private GarageApp app;
     private int pendingBind = NO_WIDGET;
@@ -81,18 +95,36 @@ public final class MainActivity extends Activity {
     private Button phoneConfirmation;
     private Switch voiceToggle;
     private AlertDialog officialDialog;
+    private ThemeClock themeClock;
+    private final ThemeStyles themeStyles = new ThemeStyles();
+    private final ThemeDialogs dialogs = new ThemeDialogs(this, themeStyles);
+    private FrameLayout homeRoot;
+    private ImageView homeBackdrop;
+    private View homeFade;
+    private View navigationShade;
+    private FrameLayout themePreview;
+    private ImageView themeImage;
+    private View themePreviewShade;
+    private TextView themeSummary;
+    private Button bandDisplayButton;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         app = (GarageApp) getApplication();
         if (state != null) pendingBind = state.getInt(BIND_ID, NO_WIDGET);
+        if (Build.VERSION.SDK_INT >= 30) {
+            getWindow().setDecorFitsSystemWindows(false);
+            getWindow().setStatusBarContrastEnforced(false);
+            getWindow().setNavigationBarContrastEnforced(false);
+        }
         setContentView(buildScreen());
+        themeClock = new ThemeClock(this, List.of(app::phoneTheme, app::wearableTheme), this::renderThemes);
         if (app.needsBrandSelection()) chooseBrand();
     }
 
     private void chooseBrand() {
         String[] names = BrandConfig.OPTIONS.stream().map(config -> config.name).toArray(String[]::new);
-        new AlertDialog.Builder(this).setTitle("选择车辆品牌")
+        dialogs.builder().setTitle("选择车辆品牌")
                 .setSingleChoiceItems(names, BrandConfig.OPTIONS.indexOf(app.brand),
                         (dialog, index) -> {
                             if (pendingBind != NO_WIDGET) app.widgets.cancelBind(pendingBind);
@@ -107,6 +139,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onStart() {
         super.onStart();
+        themeClock.start();
         app.setScreen(true, this::updateScreen);
         updateScreen();
         handleConfirmationIntent(getIntent());
@@ -127,6 +160,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override protected void onStop() {
+        themeClock.stop();
         app.setScreen(false, null);
         super.onStop();
     }
@@ -137,8 +171,19 @@ public final class MainActivity extends Activity {
     }
 
     private View buildScreen() {
+        homeRoot = new FrameLayout(this);
+        homeBackdrop = new ImageView(this);
+        homeBackdrop.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        homeBackdrop.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        homeRoot.addView(homeBackdrop, new FrameLayout.LayoutParams(-1, -1));
+        homeFade = new View(this);
+        homeFade.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        homeRoot.addView(homeFade, new FrameLayout.LayoutParams(-1, dp(248), Gravity.TOP));
         LinearLayout layout = column();
-        layout.setBackgroundColor(BG);
+        homeRoot.addView(layout, new FrameLayout.LayoutParams(-1, -1));
+        navigationShade = new View(this);
+        navigationShade.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        homeRoot.addView(navigationShade, new FrameLayout.LayoutParams(-1, 0, Gravity.BOTTOM));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
@@ -146,32 +191,64 @@ public final class MainActivity extends Activity {
         layout.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout screen = column();
         int horizontal = dp(app.widgets.screenPaddingDp());
-        screen.setPadding(horizontal, dp(18), horizontal, dp(24));
+        screen.setPadding(horizontal, dp(14), horizontal, dp(24));
         if (Build.VERSION.SDK_INT >= 30) {
             layout.setOnApplyWindowInsetsListener((view, insets) -> {
                 Insets bounds = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                layout.setPadding(bounds.left, 0, bounds.right, bounds.bottom);
-                screen.setPadding(horizontal, dp(18) + bounds.top, horizontal, dp(24));
+                layout.setPadding(bounds.left, bounds.top, bounds.right, 0);
+                screen.setPadding(horizontal, dp(14), horizontal, dp(24) + bounds.bottom);
+                ViewGroup.LayoutParams shade = navigationShade.getLayoutParams();
+                if (shade.height != bounds.bottom) {
+                    shade.height = bounds.bottom;
+                    navigationShade.setLayoutParams(shade);
+                }
                 return insets;
             });
         }
         scroll.addView(screen, new ScrollView.LayoutParams(-1, -2));
-        add(screen, text(getString(R.string.app_name), 28, INK, true), 0);
-        add(screen, button("车辆品牌：" + app.brand.name + " · 切换", this::chooseBrand), 8);
         LinearLayout vehicleHeader = row();
-        vehicleNameText = text(app.vehicleName(), 14, MUTED, false);
-        vehicleHeader.addView(vehicleNameText);
-        TextView editVehicleName = text("修改名称", 13, MINT, false);
-        editVehicleName.setPadding(dp(10), dp(4), dp(6), dp(4));
-        vehicleHeader.addView(editVehicleName);
-        vehicleHeader.setOnClickListener(view -> editVehicleName());
-        add(screen, vehicleHeader, 2);
+        LinearLayout vehicle = column();
+        vehicleNameText = photoText(app.vehicleName(), 19, INK, true);
+        vehicleNameText.setSingleLine(true);
+        vehicleNameText.setEllipsize(TextUtils.TruncateAt.END);
+        vehicle.addView(vehicleNameText);
+        TextView editVehicleName = photoText("修改名称", 12, MINT, false);
+        add(vehicle, editVehicleName, 2);
+        vehicle.setOnClickListener(view -> editVehicleName());
+        vehicleHeader.addView(vehicle, new LinearLayout.LayoutParams(0, -2, 1));
+        Button brand = button(app.brand.name + " ▾", this::chooseBrand, true);
+        brand.setContentDescription("车辆品牌：" + app.brand.name + "，切换");
+        LinearLayout.LayoutParams brandBounds = new LinearLayout.LayoutParams(-2, -2);
+        brandBounds.setMarginStart(dp(6));
+        vehicleHeader.addView(brand, brandBounds);
+
+        ImageButton themeButton = new ImageButton(this);
+        themeButton.setContentDescription("手机主题");
+        themeButton.setTooltipText("手机主题");
+        themeButton.setImageResource(R.drawable.ic_theme_palette);
+        themeButton.setScaleType(ImageView.ScaleType.CENTER);
+        themeButton.setPadding(0, 0, 0, 0);
+        themeButton.setStateListAnimator(null);
+        themeButton.setElevation(0f);
+        themeStyles.bind(themeButton, (view, palette) -> {
+            ((ImageButton) view).setImageTintList(ColorStateList.valueOf(palette == null ? INK : 0xfff3f8fc));
+            applyButtonBackground(view, palette, true);
+        });
+        themeButton.setOnClickListener(view -> openPhoneTheme());
+        LinearLayout.LayoutParams themeBounds = new LinearLayout.LayoutParams(dp(48), dp(48));
+        themeBounds.setMarginStart(dp(6));
+        vehicleHeader.addView(themeButton, themeBounds);
+        add(screen, vehicleHeader, 0);
 
         widgetContainer = new FrameLayout(this);
-        widgetContainer.setBackground(rounded(PANEL, 20));
+        widgetContainer.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), dp(20));
+            }
+        });
         widgetContainer.setClipToOutline(true);
         LinearLayout.LayoutParams widgetBounds = new LinearLayout.LayoutParams(-1, dp(app.brand.heightDp));
-        widgetBounds.topMargin = dp(18);
+        widgetBounds.topMargin = dp(10);
         screen.addView(widgetContainer, widgetBounds);
 
         setupPanel = panel();
@@ -208,8 +285,9 @@ public final class MainActivity extends Activity {
         voiceHeader.addView(text("米家语音", 18, INK, true), new LinearLayout.LayoutParams(0, -2, 1));
         voiceToggle = new Switch(this);
         voiceToggle.setContentDescription("米家语音直控");
-        voiceToggle.setThumbTintList(new ColorStateList(new int[][]{{android.R.attr.state_checked}, {}},
-                new int[]{MINT, MUTED}));
+        themeStyles.bind(voiceToggle, (view, palette) -> ((Switch) view).setThumbTintList(new ColorStateList(
+                new int[][]{{android.R.attr.state_checked}, {}},
+                new int[]{foreground(MINT, palette), foreground(MUTED, palette)})));
         voiceToggle.setOnCheckedChangeListener((button, checked) -> {
             if (checked != app.voiceEnabled()) app.setVoiceEnabled(checked);
         });
@@ -227,17 +305,6 @@ public final class MainActivity extends Activity {
                 13, MUTED, false), 8);
         add(screen, voicePanel, 12);
 
-        LinearLayout bandPanel = panel();
-        add(bandPanel, text("穿戴设备（可选）", 18, INK, true), 0);
-        linkStatus = text("", 14, MUTED, false);
-        add(bandPanel, linkStatus, 4);
-        connection = button("启动通信", this::toggleService);
-        add(bandPanel, connection, 12);
-        authorize = button("授权小米设备通信", () -> app.link.authorize());
-        add(bandPanel, authorize, 8);
-        add(bandPanel, text("仅在搭配小米手环或手表端「腕上银河」时需要启动通信。", 13, MUTED, false), 8);
-        add(screen, bandPanel, 12);
-
         LinearLayout backgroundPanel = panel();
         LinearLayout backgroundHeader = row();
         backgroundHeader.addView(text("后台运行设置", 17, INK, true), new LinearLayout.LayoutParams(0, -2, 1));
@@ -246,12 +313,26 @@ public final class MainActivity extends Activity {
         batteryStatus = text("电池与应用锁定", 13, MUTED, false);
         add(backgroundPanel, batteryStatus, 4);
         backgroundPanel.setContentDescription("后台运行设置，电池与应用锁定");
-        backgroundPanel.setOnClickListener(view -> new AlertDialog.Builder(this)
+        backgroundPanel.setOnClickListener(view -> dialogs.builder()
                 .setTitle("后台运行设置")
                 .setItems(new String[]{"省电策略设置", "应用锁定引导"}, (dialog, which) -> {
                     if (which == 0) showBatteryGuide(); else showLockGuide();
                 }).setNegativeButton("关闭", null).show());
         add(screen, backgroundPanel, 12);
+
+        LinearLayout bandPanel = panel();
+        add(bandPanel, text("穿戴设备（可选）", 18, INK, true), 0);
+        linkStatus = text("", 14, MUTED, false);
+        add(bandPanel, linkStatus, 4);
+        connection = button("启动通信", this::toggleService);
+        add(bandPanel, connection, 12);
+        authorize = button("授权小米设备通信", () -> app.link.authorize());
+        add(bandPanel, authorize, 8);
+        add(bandPanel, buildWearableThemePreview(), 8);
+        bandDisplayButton = button("手环布局", this::chooseBandDisplay);
+        add(bandPanel, bandDisplayButton, 8);
+        add(bandPanel, text("仅在搭配小米手环或手表端「腕上银河」时需要启动通信。", 13, MUTED, false), 8);
+        add(screen, bandPanel, 12);
 
         LinearLayout logs = panel();
         LinearLayout logHeader = row();
@@ -287,7 +368,7 @@ public final class MainActivity extends Activity {
         logScroll.setFillViewport(true);
         logScroll.setVerticalScrollBarEnabled(true);
         logScroll.setOverScrollMode(View.OVER_SCROLL_IF_CONTENT_SCROLLS);
-        logScroll.setBackground(rounded(BG, 12));
+        bindSurface(logScroll, BG, 12);
         logScroll.setClipToOutline(true);
         logRows = column();
         logRows.setPadding(dp(8), dp(8), dp(8), dp(8));
@@ -298,11 +379,98 @@ public final class MainActivity extends Activity {
         logs.addView(logScroll, logBounds);
         add(screen, logs, 12);
 
-        return layout;
+        return homeRoot;
+    }
+
+    private View buildWearableThemePreview() {
+        themePreview = new FrameLayout(this);
+        bindSurface(themePreview, CONTROL, 14);
+        themePreview.setClipToOutline(true);
+        themeImage = new ImageView(this);
+        themeImage.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        themeImage.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        themePreview.addView(themeImage, new FrameLayout.LayoutParams(-1, dp(92)));
+        themePreviewShade = new View(this);
+        themePreviewShade.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        themePreview.addView(themePreviewShade, new FrameLayout.LayoutParams(-1, -1));
+        LinearLayout copy = column();
+        copy.setGravity(Gravity.CENTER_VERTICAL);
+        copy.setPadding(dp(14), dp(12), dp(14), dp(12));
+        copy.addView(photoText("穿戴主题", 16, INK, true));
+        themeSummary = photoText("经典", 13, INK, false);
+        add(copy, themeSummary, 3);
+        themePreview.addView(copy, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER_VERTICAL));
+        themePreview.setMinimumHeight(dp(92));
+        themePreview.setOnClickListener(view -> openWearableTheme());
+        return themePreview;
+    }
+
+    private void openPhoneTheme() {
+        ThemeEditor.showOnPhone(this, themeStyles, app.phoneTheme(), "手机主题", false, theme -> {
+            app.setPhoneTheme(theme);
+            themeClock.refresh();
+        });
+    }
+
+    private void openWearableTheme() {
+        ThemeEditor.showOnPhone(this, themeStyles, app.wearableTheme(), "穿戴主题", true, theme -> {
+            app.setWearableTheme(theme);
+            themeClock.refresh();
+        });
+    }
+
+    private void chooseBandDisplay() {
+        int selected = app.bandDisplay().twoPage() ? 1 : 0;
+        dialogs.builder().setTitle("手环布局")
+                .setSingleChoiceItems(new String[]{"单屏 · 车况与车控上下滚动", "双屏 · 车况与车控分开展示"}, selected,
+                        (dialog, which) -> {
+                            app.selectBandDisplay(which == 1);
+                            dialog.dismiss();
+                        }).setNegativeButton("取消", null).show();
+    }
+
+    private void renderThemes(ZonedDateTime now) {
+        ThemeConfig.Variant system = ThemeStyles.systemVariant(this);
+        renderPhoneTheme(now, system);
+        renderWearableThemePreview(now, system);
+    }
+
+    private void renderPhoneTheme(ZonedDateTime now, ThemeConfig.Variant system) {
+        ThemeConfig config = app.phoneTheme();
+        ThemeConfig.Variant active = config.activeVariant(now, system);
+        String asset = config.asset(active);
+        boolean day = active == ThemeConfig.Variant.DAY;
+        boolean themed = ThemeArtwork.show(homeBackdrop, asset, day ? 0x00000000 : 0x180d1626, 1);
+        ThemeStyles.Palette palette = themed ? ThemeStyles.forVariant(active) : null;
+        themeStyles.apply(palette);
+        homeRoot.setBackgroundColor(themed ? palette.background() : BG);
+        if (themed) {
+            homeFade.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{0x990d1724, 0x730d1724, 0x000d1724}));
+            navigationShade.setBackgroundColor(0xb00d1724);
+        } else {
+            homeFade.setBackground(null);
+            navigationShade.setBackgroundColor(BG);
+        }
+        ThemeStyles.applySystemBars(getWindow(), Build.VERSION.SDK_INT >= 30 ? Color.TRANSPARENT : BG, false);
+    }
+
+    private void renderWearableThemePreview(ZonedDateTime now, ThemeConfig.Variant system) {
+        ThemeConfig config = app.wearableTheme();
+        ThemeConfig.Variant active = config.activeVariant(now, system);
+        String asset = config.asset(active);
+        boolean previewHasArtwork = ThemeArtwork.show(themeImage, asset, 0);
+        themePreviewShade.setBackground(previewHasArtwork
+                ? new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xc40d1724, 0x880d1724, 0x1a0d1724})
+                : null);
+        String summary = config.summary(active, ThemeConfig.PHONE_SYSTEM_LABEL);
+        themeSummary.setText(summary);
+        themePreview.setContentDescription("穿戴主题，" + summary);
     }
 
     private void updateScreen() {
         vehicleNameText.setText(app.vehicleName());
+        bandDisplayButton.setText("手环布局 · " + (app.bandDisplay().twoPage() ? "双屏" : "单屏"));
         GalaxyWidgets.Card card = app.widgets.primary();
         showWidget(card);
         String link = app.link.status();
@@ -361,7 +529,7 @@ public final class MainActivity extends Activity {
             int color = event.warning() ? 0xffffbd69 : latest ? MINT : INK;
             LinearLayout item = column();
             item.setPadding(dp(10), dp(9), dp(10), dp(9));
-            if (latest) item.setBackground(rounded(event.warning() ? 0xff3a3028 : PRIMARY_CONTROL, 10));
+            if (latest) bindSurface(item, event.warning() ? 0xff3a3028 : PRIMARY_CONTROL, 10);
             LinearLayout heading = row();
             TextView title = text("•  " + event.title(), 14, color, latest);
             heading.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
@@ -375,15 +543,16 @@ public final class MainActivity extends Activity {
     }
 
     private void editVehicleName() {
-        EditText input = new EditText(this);
+        EditText input = new EditText(dialogs.context());
+        dialogs.styleInput(input);
         input.setSingleLine(true);
         input.setHint("输入车辆名称");
         input.setText(app.vehicleName());
         input.setSelection(input.getText().length());
         LinearLayout container = column();
-        container.setPadding(dp(20), dp(8), dp(20), 0);
+        container.setPadding(dp(24), dp(8), dp(24), dp(4));
         container.addView(input);
-        new AlertDialog.Builder(this)
+        dialogs.builder()
                 .setTitle("自定义车辆名称")
                 .setMessage("手环与手表首屏将显示此名称，留空则恢复为「" + GarageApp.DEFAULT_VEHICLE_NAME + "」。")
                 .setView(container)
@@ -418,7 +587,7 @@ public final class MainActivity extends Activity {
             MiHomeVoice.Command command = commands[index];
             choices[index] = command.label + "\n" + (app.brand.namespace + ":" + command.name());
         }
-        new AlertDialog.Builder(this)
+        dialogs.builder()
                 .setTitle("点按复制通知指令码")
                 .setItems(choices, (dialog, index) -> getSystemService(ClipboardManager.class)
                         .setPrimaryClip(ClipData.newPlainText("米家指令码", (app.brand.namespace + ":" + commands[index].name()))))
@@ -467,7 +636,7 @@ public final class MainActivity extends Activity {
             return;
         }
         long revision = app.widgets.revision(card);
-        officialDialog = new AlertDialog.Builder(this)
+        officialDialog = dialogs.builder()
                 .setTitle(prompt.title())
                 .setMessage("由银河官方小组件请求确认。".replace("银河", app.brand.name))
                 .setNeutralButton("返回", null)
@@ -477,7 +646,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showBatteryGuide() {
-        new AlertDialog.Builder(this)
+        dialogs.builder()
                 .setTitle("省电策略设置")
                 .setMessage("在「智在银河」的应用信息中，打开「电池用量」或「省电策略」，选择「无限制」。".replace("银河", app.brand.name)
                         + "如果系统提供的是「允许后台活动」，请开启它。"
@@ -490,7 +659,7 @@ public final class MainActivity extends Activity {
     }
 
     private void showLockGuide() {
-        new AlertDialog.Builder(this)
+        dialogs.builder()
                 .setTitle("应用锁定引导")
                 .setMessage("打开最近任务，找到「智在银河」。长按卡片或打开卡片菜单，选择「锁定」或锁形图标。".replace("银河", app.brand.name)
                         + "\n\n部分小米手机可在「手机管家 → 设置 → 优化加速 → 锁定任务」中开启。"
@@ -559,7 +728,7 @@ public final class MainActivity extends Activity {
             app.disarm();
             return;
         }
-        new AlertDialog.Builder(this)
+        dialogs.builder()
                 .setTitle("允许车控")
                 .setMessage("请确认当前卡片选中目标车辆，且映射按钮与" + app.brand.name + "小组件配置一致。米家语音指令或穿戴端确认将触发对应的官方按钮。"
                         + (app.brand == BrandConfig.LYNKCO ? "领克语音无需穿戴设备。切换车锁或车窗会点击官方按钮，由车主判断当前状态。与本次动作匹配的官方弹窗可由伴侣提交。" : "")
@@ -619,7 +788,7 @@ public final class MainActivity extends Activity {
         } catch (RuntimeException unavailable) {
             android.util.Log.w("GarageActivity", "Widget configuration did not open");
         }
-        new AlertDialog.Builder(this).setTitle("在" + app.brand.appName + "里配置")
+        dialogs.builder().setTitle("在" + app.brand.appName + "里配置")
                 .setMessage("打开官方 App 配置小组件，选择车辆和需要的按钮，保存后返回这里查看卡片。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("打开" + app.brand.appName, (dialog, which) -> {
@@ -635,7 +804,7 @@ public final class MainActivity extends Activity {
         if (app.brand == BrandConfig.LYNKCO && target.role().isEmpty()) {
             String[] choices = java.util.stream.Stream.concat(LynkMark.CATEGORIES.stream(), java.util.stream.Stream.of("清除标记")).toArray(String[]::new);
             String detected = target.lynkIcon() == null ? "" : "自动识别：" + target.lynkIcon().label() + "\n";
-            new AlertDialog.Builder(this).setTitle(detected + "车主明确标记：" + target.slot() + "\n描述：" + target.label() + "\n签名：" + target.fingerprint())
+            dialogs.builder().setTitle(detected + "车主明确标记：" + target.slot() + "\n描述：" + target.label() + "\n签名：" + target.fingerprint())
                     .setItems(choices, (dialog, index) -> {
                         if (index == LynkMark.CATEGORIES.size()) { saveBinding(card, target, "", ""); return; }
                         String category = choices[index];
@@ -645,7 +814,7 @@ public final class MainActivity extends Activity {
                         }
                         String[] directions = category.equals("锁") ? new String[]{"当前已解锁 → 上锁", "当前已上锁 → 解锁", "未知"}
                                 : new String[]{"当前关闭 → 打开（须已验证点按）", "当前开启 → 关闭（须已验证点按）", "未知"};
-                        new AlertDialog.Builder(this).setTitle("核对卡片当前状态及真机点按方向")
+                        dialogs.builder().setTitle("核对卡片当前状态及真机点按方向")
                                 .setItems(directions, (d, i) -> saveBinding(card, target, LynkWidgets.binding(target).action(),
                                         category + ":" + (i == 2 ? "" : category.equals("锁") ? (i == 0 ? "lock" : "unlock") : (i == 0 ? "open" : "close"))))
                                 .setNegativeButton("取消", null).show();
@@ -661,7 +830,7 @@ public final class MainActivity extends Activity {
             return;
         }
         if (target.match() != null) {
-            new AlertDialog.Builder(this).setTitle(buttonLabel(card, target))
+            dialogs.builder().setTitle(buttonLabel(card, target))
                     .setMessage("修改功能请到这张卡片的银河官方配置页面。".replace("银河", app.brand.name))
                     .setPositiveButton("知道了", null).show();
             return;
@@ -674,7 +843,7 @@ public final class MainActivity extends Activity {
         String[] choices = Arrays.copyOf(Arrays.stream(actions).map(action -> action.label).toArray(String[]::new),
                 actions.length + 1);
         choices[actions.length] = "清除标记";
-        new AlertDialog.Builder(this).setTitle("补标卡片按钮")
+        dialogs.builder().setTitle("补标卡片按钮")
                 .setItems(choices, (dialog, index) -> {
                     if (index == actions.length) {
                         saveBinding(card, target, "", "");
@@ -687,7 +856,7 @@ public final class MainActivity extends Activity {
     }
 
     private void chooseLockState(GalaxyWidgets.Card card, WidgetTree.Button target) {
-        new AlertDialog.Builder(this).setTitle("此时的车门锁态")
+        dialogs.builder().setTitle("此时的车门锁态")
                 .setMessage("请先对照" + app.brand.appName + " App 的当前锁态。手环确认时会显示切换后的目标状态。")
                 .setNeutralButton("取消", null)
                 .setNegativeButton("当前已解锁", (dialog, which) ->
@@ -737,7 +906,7 @@ public final class MainActivity extends Activity {
     private LinearLayout panel() {
         LinearLayout value = column();
         value.setPadding(dp(16), dp(14), dp(16), dp(16));
-        value.setBackground(rounded(PANEL, 18));
+        bindSurface(value, PANEL, 18);
         return value;
     }
 
@@ -751,29 +920,76 @@ public final class MainActivity extends Activity {
         TextView view = new TextView(this);
         view.setText(value);
         view.setTextSize(size);
-        view.setTextColor(color);
+        themeStyles.bind(view, (target, palette) -> ((TextView) target).setTextColor(foreground(color, palette)));
         if (strong) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
     }
 
+    private TextView photoText(String value, int size, int color, boolean strong) {
+        TextView view = text(value, size, color, strong);
+        themeStyles.bind(view, (target, palette) -> ((TextView) target).setTextColor(
+                palette == null ? color : color == MINT ? 0xffb5f1df : 0xfff3f8fc));
+        return view;
+    }
+
     private Button button(String title, Runnable clicked) {
+        return button(title, clicked, false);
+    }
+
+    private Button button(String title, Runnable clicked, boolean quiet) {
         Button button = new Button(this);
         button.setText(title);
         button.setAllCaps(false);
-        button.setTextColor(new ColorStateList(new int[][]{{-android.R.attr.state_enabled},
-                {android.R.attr.state_activated}, {}}, new int[]{0xff81939a, MINT, INK}));
-        button.setTextSize(14);
+        button.setTextSize(quiet ? 13 : 14);
         button.setMinHeight(dp(46));
         button.setMinimumHeight(dp(46));
         button.setMinWidth(0);
         button.setMinimumWidth(0);
-        button.setPadding(dp(13), dp(6), dp(13), dp(6));
-        GradientDrawable surface = rounded(CONTROL, 12);
-        surface.setColor(new ColorStateList(new int[][]{{-android.R.attr.state_enabled},
-                {android.R.attr.state_activated}, {}}, new int[]{CONTROL, PRIMARY_CONTROL, CONTROL}));
-        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x299ae8ce), surface, null));
+        int horizontal = dp(quiet ? 8 : 13);
+        button.setPadding(horizontal, dp(6), horizontal, dp(6));
+        button.setStateListAnimator(null);
+        button.setElevation(0f);
+        themeStyles.bind(button, (target, palette) -> {
+            if (quiet) ((Button) target).setTextColor(palette == null ? MUTED : 0xffdce6ed);
+            else ((Button) target).setTextColor(new ColorStateList(BUTTON_STATES, new int[]{
+                    foreground(0xff81939a, palette), foreground(MINT, palette), foreground(INK, palette)}));
+            applyButtonBackground(target, palette, quiet);
+        });
         button.setOnClickListener(view -> clicked.run());
         return button;
+    }
+
+    private void applyButtonBackground(View view, ThemeStyles.Palette palette, boolean quiet) {
+        int ripple = quiet ? 0x25ffffff : (foreground(MINT, palette) & 0x00ffffff) | 0x29000000;
+        if (quiet) {
+            view.setBackground(new RippleDrawable(ColorStateList.valueOf(ripple), null, rounded(Color.WHITE, 12)));
+            return;
+        }
+        int control = surfaceColor(CONTROL, palette);
+        GradientDrawable surface = rounded(control, 12);
+        surface.setColor(new ColorStateList(BUTTON_STATES, new int[]{control, surfaceColor(PRIMARY_CONTROL, palette), control}));
+        view.setBackground(new RippleDrawable(ColorStateList.valueOf(ripple), surface, null));
+    }
+
+    private void bindSurface(View view, int color, int radius) {
+        themeStyles.bind(view, (target, palette) -> target.setBackground(rounded(surfaceColor(color, palette), radius)));
+    }
+
+    private static int foreground(int color, ThemeStyles.Palette palette) {
+        if (palette == null) return color;
+        if (color == MINT) return palette.accent();
+        if (color == MUTED || color == 0xff81939a) return palette.muted();
+        if (color == 0xffffbd69) return palette == ThemeStyles.DAY ? 0xff8d4b13 : color;
+        return palette.ink();
+    }
+
+    private static int surfaceColor(int color, ThemeStyles.Palette palette) {
+        if (palette == null) return color;
+        if (color == BG) return palette.background();
+        if (color == PANEL) return palette == ThemeStyles.DAY ? 0xe6f5f9fc : 0xe6132132;
+        if (color == PRIMARY_CONTROL) return palette.primary();
+        if (color == 0xff3a3028) return palette == ThemeStyles.DAY ? 0xfff6e7d6 : color;
+        return palette.control();
     }
 
     private GradientDrawable rounded(int color, int radius) {
@@ -821,7 +1037,7 @@ public final class MainActivity extends Activity {
             List<WidgetTree.Button> choices = app.widgets.buttons(card);
             if (choices.isEmpty()) return false;
             String[] names = choices.stream().map(target -> buttonLabel(card, target)).toArray(String[]::new);
-            new AlertDialog.Builder(MainActivity.this).setTitle("小组件操作")
+            dialogs.builder().setTitle("小组件操作")
                     .setItems(names, (dialog, index) -> labelButton(card, choices.get(index))).show();
             return true;
         }

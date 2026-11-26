@@ -18,8 +18,9 @@ android {
         applicationId 'com.garage.bandcontrol'
         minSdk 28
         targetSdk 35
-        versionCode 34
-        versionName '0.1.33'
+        versionCode 44
+        versionName '0.2.7'
+        testInstrumentationRunner 'com.garage.bandcontrol.LynkCardInstrumentation'
     }
 
     signingConfigs {
@@ -40,6 +41,8 @@ android {
         buildConfig = true
     }
     sourceSets {
+        main.java.srcDir '../shared/src/main/java'
+        main.assets.srcDir '../shared/src/main/assets'
         debug.res.srcDir new File(workspace, '.local/android-res')
     }
     compileOptions {

@@ -53,6 +53,9 @@ function start(options = {}) {
   const component = {}
   exports.entry(component)
   const page = Object.assign(component.default, component.default.data)
+  for (const [key, fn] of Object.entries(component.default.computed || {})) {
+    Object.defineProperty(page, key, { get: fn, enumerable: true, configurable: true })
+  }
   page.onInit()
   page.onShow()
   page.onReady()
@@ -293,7 +296,9 @@ test('only a failed read send retries after 500 ms with the original request ID'
     second.fail()
     assert.equal(link.page.modeLabel, '离线')
     link.advance(501)
-    assert.equal(link.sent.length, count + 1)
+    assert.equal(link.sent.length, count + 2)
+    assert.equal(link.types().at(-1), 'hello')
+    assert.equal(link.sent.filter(message => message.data.id === first.data.id).length, 2)
   }
 })
 
@@ -326,7 +331,7 @@ test('prepare, execute, and cancel each get one attempt on send failure or excep
       assert.equal(failed.data.type, type)
       if (!throwInstead) failed.fail()
       assert.equal(link.page.modeLabel, '离线')
-      if (type === 'execute') assert.match(link.page.toastText, /结果未知/)
+      if (type === 'execute') assert.match(link.page.toastText, /结果待核对/)
       link.advance(500)
       assert.equal(link.types().filter(sentType => sentType === type).length, 1)
     }
@@ -345,9 +350,9 @@ test('read response deadlines stay at 8 and 13 seconds and do not trigger a rese
     link.advance(timeout - 1)
     assert.equal(link.page.pending.type, type)
     link.advance(1)
-    assert.equal(link.page.pending, null)
+    assert.equal(link.page.pending.type, 'hello')
     assert.equal(link.page.modeLabel, '离线')
-    assert.equal(link.sent.length, count)
+    assert.equal(link.sent.length, count + 1)
   }
 })
 
@@ -385,13 +390,13 @@ test('the event ring restores history, caps persistence at 20, and shows the lat
   writes.shift()()
   assert.equal(stored.length, 20)
   assert.deepEqual(stored.slice(-3).map(entry => [entry.event, entry.id]), [
-    ['send', id], ['timeout', id], ['disconnect', id]
+    ['timeout', id], ['disconnect', id], ['send', link.sent.at(-1).data.id]
   ])
   assert.ok(stored.every(entry => typeof entry.ts === 'number' && !('token' in entry)))
   link.page.openSettings()
   assert.equal(link.page.settingsOpen, true)
   assert.equal(link.page.diagnosticLines.length, 3)
-  assert.match(link.page.diagnosticLines[0], /disconnect status timeout/)
+  assert.match(link.page.diagnosticLines[1], /disconnect status timeout/)
   assert.equal(link.page.onBackPress(), true)
   assert.equal(link.page.settingsOpen, false)
 })
@@ -430,7 +435,7 @@ test('error-only envelopes report their cause immediately, including for execute
     assert.equal(link.page.pending, null)
     assert.equal(link.page.modeLabel, '离线')
     assert.match(link.page.toastText, message)
-    assert.match(link.page.toastText, /结果未知/)
+    assert.match(link.page.toastText, /结果待核对/)
     assert.equal(link.page.events.at(-2).detail, error)
     assert.equal(link.page.events.at(-1).event, 'disconnect')
   }
@@ -556,7 +561,7 @@ test('a missing vibrator leaves confirmations and dispatch usable', () => {
   assert.equal(link.page.vibrator, null)
 })
 
-test('layout profile adapts to Band 10 capsule, circular Watch 5, and falls back to Band 10 Pro rect', () => {
+test('layout profile adapts to Band 10 capsule, circular Watch 5, and Band 10 Pro rect', () => {
   const capsule = start({
     native: {
       '@app-module/system.device': {
@@ -610,19 +615,15 @@ test('layout profile adapts to Band 10 capsule, circular Watch 5, and falls back
     assert.equal(circle.page.watchPage, 0)
   }
 
-  for (const native of [
-    {},
-    { '@app-module/system.device': { getInfo({ fail }) { fail('unavailable', 200) } } },
-    { '@app-module/system.device': { getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) } } }
-  ]) {
-    const rect = start({ native })
-    assert.equal(rect.page.layoutProfile, 'rect')
-    assert.equal(rect.page.ui.range, 'range')
-    rect.hello()
-    rect.reply({ mapped: ['lock', 'climate', 'window_vent', 'trunk'], available: ['climate'] })
-    assert.equal(rect.page.displayRows.length, 2)
-    assert.equal(rect.page.displayRows[0].first.labelStyle, 'tile-label')
-  }
+  const rect = start({ native: {
+    '@app-module/system.device': { getInfo({ success }) { success({ screenWidth: 336, screenHeight: 480, screenShape: 'rect' }) } }
+  } })
+  assert.equal(rect.page.layoutProfile, 'rect')
+  assert.equal(rect.page.ui.range, 'range')
+  rect.hello()
+  rect.reply({ mapped: ['lock', 'climate', 'window_vent', 'trunk'], available: ['climate'] })
+  assert.equal(rect.page.displayRows.length, 4)
+  assert.equal(rect.page.displayRows[0].first.labelStyle, 'tile-label')
 })
 
 test('car image sync pulls chunks when hash changes, caches via system.file, and yields to user controls', () => {
@@ -748,7 +749,7 @@ test('energy readings fall back to battery percentage when kilometers are unavai
   assert.equal(link.page.electricUnit, '%')
   assert.equal(link.page.fuel, '517')
   assert.equal(link.page.fuelUnit, '\u00a0km')
-  assert.equal(link.page.watchSubrange, '电 97% · 油 517\u00a0km')
+  assert.deepEqual(Array.from(link.page.rangeBreakdown, ({ id, value }) => [id, value]), [['electric', '97%'], ['fuel', '517\u00a0km']])
 
   link.page.syncStatus()
   link.reply({
@@ -758,5 +759,5 @@ test('energy readings fall back to battery percentage when kilometers are unavai
   assert.equal(link.page.totalUnit, '%')
   assert.equal(link.page.electric, '85')
   assert.equal(link.page.electricUnit, '%')
-  assert.equal(link.page.watchSubrange, '电 85%')
+  assert.deepEqual(Array.from(link.page.rangeBreakdown, ({ id, value }) => [id, value]), [['electric', '85%']])
 })

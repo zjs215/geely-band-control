@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="fr_unlock" type="id" />
+    <item name="unlock" type="id" />
+    <item name="pb_unlock" type="id" />
+    <item name="fr_window" type="id" />
+    <item name="window" type="id" />
+    <item name="pb_window" type="id" />
+    <item name="verify" type="id" />
+    <item name="ty_confirm_title" type="id" />
+    <item name="tv_verify" type="id" />
+    <item name="tv_cancel" type="id" />
+</resources>

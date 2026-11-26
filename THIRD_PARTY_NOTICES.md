@@ -11,6 +11,7 @@
 | AIoT Toolkit | npm 的 `aiot-toolkit` 2.0.5 及传递依赖，锁文件保留版本、完整性和许可证信息。使用时遵循各包许可证 |
 | 小米 Wearable SDK | 官方通信样例内 `xms-wearable-lib_1.4_release.aar`。源码仓库通过构建脚本从官方源取得并校验，不附带该二进制。当前尚未确认独立再分发授权，公开包含该 SDK 的 APK 前需核对小米许可 |
 | 银河官方卡片 | 通过 Android AppWidgetHost 托管用户已安装 App 提供的 RemoteViews。官方 App、图标、车图和反编译实现由各自权利人持有 |
+| 主题背景 | 来自「小领通」APK 与 `xiaolingtong-v0.3.31` 源码的原始场景，用于三端主题试装。Android 保留原 WebP，Vela 使用同一素材的 JPG 屏形裁切版 |
 
 小米 SDK 官方样例地址和 SHA-256 见 `scripts/prepare.ps1`。依赖在构建过程中获取，下载和使用应遵循各自条款。
 

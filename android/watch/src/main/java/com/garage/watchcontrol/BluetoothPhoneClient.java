@@ -42,8 +42,7 @@ final class BluetoothPhoneClient {
     private volatile int generation;
     private volatile BluetoothSocket activeSocket;
     private volatile ExecutorService writer;
-    private Thread connectThread;
-    private String preferredAddress = "";
+    private volatile String preferredAddress = "";
 
     BluetoothPhoneClient(Context context, Handler main, Listener listener) {
         this.context = context;
@@ -89,11 +88,12 @@ final class BluetoothPhoneClient {
     }
 
     boolean isConnected() {
-        return active && activeSocket != null && activeSocket.isConnected();
+        BluetoothSocket socket = activeSocket;
+        return active && writer != null && socket != null && socket.isConnected();
     }
 
     void connect() {
-        if (active && (isConnected() || (connectThread != null && connectThread.isAlive()))) return;
+        if (active) return;
         if (!hasPermission()) {
             listener.onError("请在手表设置中允许附近设备权限");
             return;
@@ -106,7 +106,7 @@ final class BluetoothPhoneClient {
         }
         active = true;
         int requestGeneration = ++generation;
-        connectThread = new Thread(() -> connectAndRead(adapter, requestGeneration), "WatchPhoneConnect");
+        Thread connectThread = new Thread(() -> connectAndRead(adapter, requestGeneration), "WatchPhoneConnect");
         connectThread.setDaemon(true);
         connectThread.start();
     }
@@ -121,6 +121,7 @@ final class BluetoothPhoneClient {
     }
 
     void send(String text, Runnable onFail) {
+        int requestGeneration = generation;
         ExecutorService currentWriter = writer;
         BluetoothSocket socket = activeSocket;
         if (!active || socket == null || currentWriter == null) {
@@ -132,13 +133,11 @@ final class BluetoothPhoneClient {
                 try {
                     OutputStream out = socket.getOutputStream();
                     WatchFraming.writeFrame(out, text);
-                } catch (IOException failed) {
-                    closeSession();
+                } catch (IOException | SecurityException failed) {
                     main.post(() -> {
-                        onFail.run();
-                        if (active) {
-                            active = false;
-                            listener.onDisconnected("蓝牙连接已断开");
+                        if (active && generation == requestGeneration) {
+                            disconnect("蓝牙连接已断开");
+                            onFail.run();
                         }
                     });
                 }
@@ -150,7 +149,12 @@ final class BluetoothPhoneClient {
 
     @SuppressLint("MissingPermission")
     private void connectAndRead(BluetoothAdapter adapter, int requestGeneration) {
-        List<PairedDevice> candidates = bondedDevices();
+        List<PairedDevice> candidates;
+        try {
+            candidates = bondedDevices();
+        } catch (SecurityException revoked) {
+            candidates = List.of();
+        }
         if (candidates.isEmpty()) {
             main.post(() -> {
                 if (active && generation == requestGeneration) {
@@ -169,6 +173,13 @@ final class BluetoothPhoneClient {
             try {
                 BluetoothDevice device = adapter.getRemoteDevice(candidate.address());
                 socket = device.createRfcommSocketToServiceRecord(SERVICE_UUID);
+                synchronized (this) {
+                    if (!active || generation != requestGeneration) {
+                        closeQuietly(socket);
+                        return;
+                    }
+                    activeSocket = socket;
+                }
                 socket.connect();
                 connected = socket;
                 connectedName = candidate.name();
@@ -178,20 +189,16 @@ final class BluetoothPhoneClient {
             }
         }
         if (connected == null) {
-            main.post(() -> {
-                if (active && generation == requestGeneration) {
-                    active = false;
-                    listener.onDisconnected("请检查手机端「腕上银河」通信服务");
-                }
-            });
+            reportDisconnected(requestGeneration, "请检查手机端「腕上银河」通信服务");
             return;
         }
-        if (!active || generation != requestGeneration) {
-            closeQuietly(connected);
-            return;
+        synchronized (this) {
+            if (!active || generation != requestGeneration) {
+                closeQuietly(connected);
+                return;
+            }
+            writer = Executors.newSingleThreadExecutor();
         }
-        activeSocket = connected;
-        writer = Executors.newSingleThreadExecutor();
         String finalName = connectedName;
         main.post(() -> {
             if (active && generation == requestGeneration) {
@@ -209,19 +216,19 @@ final class BluetoothPhoneClient {
                     }
                 });
             }
-        } catch (IOException ignored) {
+        } catch (IOException | SecurityException ignored) {
         } finally {
-            closeSession();
-            main.post(() -> {
-                if (active && generation == requestGeneration) {
-                    active = false;
-                    listener.onDisconnected("手机连接已断开");
-                }
-            });
+            reportDisconnected(requestGeneration, "手机连接已断开");
         }
     }
 
-    private void closeSession() {
+    private void reportDisconnected(int requestGeneration, String reason) {
+        main.post(() -> {
+            if (active && generation == requestGeneration) disconnect(reason);
+        });
+    }
+
+    private synchronized void closeSession() {
         closeQuietly(activeSocket);
         activeSocket = null;
         if (writer != null) {

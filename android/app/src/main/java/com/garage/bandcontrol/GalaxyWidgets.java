@@ -67,11 +67,12 @@ class GalaxyWidgets {
 
         String lynkShortLabel() {
             String category = lockState;
-            if (category.isEmpty() && button.lynkIcon() != null) {
-                category = switch (button.lynkIcon()) {
+            LynkWidgetIcons.Kind icon = button.lynkDisplayIcon();
+            if (category.isEmpty() && icon != null) {
+                category = switch (icon) {
                     case WINDOW_VENT -> "车窗微开";
                     case WINDOW_OPEN -> "车窗全开";
-                    default -> button.lynkIcon().category;
+                    default -> icon.category;
                 };
             }
             return switch (category) {
@@ -87,7 +88,11 @@ class GalaxyWidgets {
         }
     }
 
-    record Control(Target target, String blockedReason) {
+    record Control(Target target, String blockedReason, String slotState, String slotLabel) {
+        Control(Target target, String blockedReason) {
+            this(target, blockedReason, "", "");
+        }
+
         boolean ready() {
             return blockedReason.isEmpty();
         }
@@ -102,6 +107,7 @@ class GalaxyWidgets {
         final HostedView view;
         final List<Binding> bindings;
         private Map<String, CarAction> lastMapped = Map.of();
+        private final Map<String, String> lynkSlotLabels = new LinkedHashMap<>();
         private VehicleStatus latest = VehicleStatus.EMPTY;
         private boolean validReading;
         private long carImageRevision = -1;
@@ -301,6 +307,7 @@ class GalaxyWidgets {
             card.latest = VehicleStatus.EMPTY;
             card.validReading = false;
             card.lastMapped = Map.of();
+            card.lynkSlotLabels.clear();
         }
         cancelRefresh("卡片配置正在重新核对");
         onChange.accept(AppWidgetManager.INVALID_APPWIDGET_ID);
@@ -323,8 +330,8 @@ class GalaxyWidgets {
         if (config.slotMode == BrandConfig.SlotMode.CONFIGURABLE && !tree.loading(card.view)
                 && !tree.confirmationVisible(card.view)) {
             boolean removed = card.bindings.removeIf(binding -> binding.mark() != null
-                    && current.stream().noneMatch(binding::matches));
-            if (removed) { card.lastMapped = Map.of(); persist(); }
+                    && current.stream().anyMatch(button -> button.slot().equals(binding.slot()) && !binding.matches(button)));
+            if (removed) persist();
         }
         return current;
     }
@@ -411,6 +418,7 @@ class GalaxyWidgets {
             card.latest = VehicleStatus.EMPTY;
             card.validReading = false;
             card.lastMapped = Map.of();
+            card.lynkSlotLabels.clear();
             card.carImage = null;
             card.carImageRevision = -1;
             if (refresh != null && refresh.card == card) finishRefresh("blocked", "当前卡片没有可读取的车辆");
@@ -432,9 +440,12 @@ class GalaxyWidgets {
     Map<CarAction, Control> controls() {
         Card card = primary();
         if (card == null || !hasNormalLayout(card)) return Collections.emptyMap();
+        if (config == BrandConfig.LYNKCO) return lynkControls(card);
         Map<CarAction, Control> result = new LinkedHashMap<>();
-        if (tree.loading(card.view) || tree.confirmationVisible(card.view)) {
-            for (CarAction action : card.lastMapped.values()) result.put(action, WAITING_FOR_WIDGET);
+        boolean loading = tree.loading(card.view);
+        if (loading || tree.confirmationVisible(card.view)) {
+            Control paused = loading ? new Control(null, "加载中", "loading", "") : WAITING_FOR_WIDGET;
+            for (CarAction action : card.lastMapped.values()) result.put(action, paused);
             return result;
         }
 
@@ -446,8 +457,7 @@ class GalaxyWidgets {
                         && match.direction() == ControlDirection.CLOSE);
         for (WidgetTree.Button button : buttons) {
             if (!button.role().isEmpty()) continue;
-            Binding binding = config.slotMode == BrandConfig.SlotMode.CONFIGURABLE
-                    ? (card.binding(button) == null ? LynkWidgets.binding(button) : card.binding(button)) : card.binding(button);
+            Binding binding = card.binding(button);
             CarAction action = binding == null ? null : CarAction.fromId(binding.action());
             if (action == null || live.containsKey(action)) continue;
 
@@ -455,15 +465,6 @@ class GalaxyWidgets {
             String lockState = "";
             String blockedReason = "";
             ControlDirection direction = button.match() == null ? null : button.match().direction();
-            if (config.slotMode == BrandConfig.SlotMode.CONFIGURABLE) {
-                if (binding.mark() != null) {
-                    direction = ControlDirection.fromId(binding.mark().direction());
-                    lockState = binding.mark().category();
-                    title += " · 车主标记：" + lockState + (direction == null ? " · 请核对方向" : " · " + direction.id);
-                } else if (button.lynkIcon() != null) {
-                    title = button.lynkIcon().label() + " · 请核对方向";
-                }
-            }
             if (action == CarAction.LOCK) {
                 lockState = binding.lockState();
                 blockedReason = LockControl.blockedReason(card.validReading, card.latest.motion(), lockState)
@@ -483,19 +484,71 @@ class GalaxyWidgets {
                 else title = (direction == ControlDirection.OPEN ? "开启" : "关闭") + action.label;
             }
             Target target = new Target(card.id, button, title, lockState, direction);
-            live.put(action, new Control(target, blockedReason));
+            boolean unknown = !blockedReason.isEmpty()
+                    && (action == CarAction.LOCK || action.isWindow() || action.isSwitch())
+                    && (!card.validReading || direction == null);
+            live.put(action, new Control(target, blockedReason, unknown ? "unknown" : "", ""));
             liveSlots.put(button.slot(), action);
         }
 
         Map<String, CarAction> mapped = new LinkedHashMap<>();
         for (String slot : config.slots) {
             CarAction action = liveSlots.get(slot);
-            if (action == null) {
+            Control control;
+            if (action != null) {
+                control = live.get(action);
+            } else {
                 action = card.lastMapped.get(slot);
-                if (action == null || live.containsKey(action) || !tree.slotLoading(card.view, slot)) continue;
+                if (action == null || live.containsKey(action) || !tree.slotVisible(card.view, slot)) continue;
+                control = tree.slotLoading(card.view, slot)
+                        ? new Control(null, "加载中", "loading", "")
+                        : new Control(null, "状态未知，请在官方 App 核对", "unknown", "");
             }
             mapped.put(slot, action);
-            result.put(action, live.getOrDefault(action, WAITING_FOR_WIDGET));
+            result.put(action, control);
+        }
+        card.lastMapped = mapped;
+        return result;
+    }
+
+    private Map<CarAction, Control> lynkControls(Card card) {
+        Map<CarAction, Control> result = new LinkedHashMap<>();
+        Map<String, CarAction> mapped = new LinkedHashMap<>();
+        Map<String, WidgetTree.Button> current = new LinkedHashMap<>();
+        for (WidgetTree.Button button : buttons(card)) {
+            if (button.role().isEmpty()) current.put(button.slot(), button);
+        }
+        boolean paused = tree.loading(card.view) || tree.confirmationVisible(card.view);
+        for (String slot : config.slots) {
+            if (!tree.slotVisible(card.view, slot) && !(paused && card.lastMapped.containsKey(slot))) {
+                card.lynkSlotLabels.remove(slot);
+                continue;
+            }
+            CarAction action = LynkWidgets.actionForSlot(slot);
+            mapped.put(slot, action);
+            WidgetTree.Button button = current.get(slot);
+            Binding binding = button == null ? null : card.binding(button);
+            LynkMark mark = binding == null ? null : binding.mark();
+            LynkWidgets.SlotState state = LynkWidgets.slotState(tree, card.view, slot, button, mark != null);
+            if (state != LynkWidgets.SlotState.READY) {
+                String reason = state == LynkWidgets.SlotState.UNKNOWN ? "状态未知，请在领克 App 核对"
+                        : state == LynkWidgets.SlotState.LOADING ? "加载中" : WAITING_FOR_WIDGET.blockedReason();
+                result.put(action, new Control(null, reason, state.wireValue,
+                        card.lynkSlotLabels.getOrDefault(slot, "")));
+                continue;
+            }
+            String category = mark == null ? "" : mark.category();
+            ControlDirection direction = mark == null
+                    ? (button.match() == null ? null : button.match().direction())
+                    : ControlDirection.fromId(mark.direction());
+            String title = mark != null
+                    ? action.label + " · 车主标记：" + category + (direction == null ? " · 请核对方向" : " · " + direction.id)
+                    : button.lynkDisplayIcon() == null ? action.label : button.lynkDisplayIcon().label() + " · 请核对方向";
+            Target target = new Target(card.id, button, title, category, direction);
+            String label = target.lynkShortLabel();
+            if (label.isEmpty()) card.lynkSlotLabels.remove(slot);
+            else card.lynkSlotLabels.put(slot, label);
+            result.put(action, new Control(target, "", "", label));
         }
         card.lastMapped = mapped;
         return result;

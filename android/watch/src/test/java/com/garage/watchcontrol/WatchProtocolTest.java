@@ -11,6 +11,40 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public final class WatchProtocolTest {
+    @Test public void pullRefreshRequiresAnUpwardGestureAndEnoughTravel() {
+        assertEquals(0, VerticalPagerView.refreshStage(-85, 0, 8, 50));
+        assertEquals(0, VerticalPagerView.refreshStage(60, 62, 8, 50));
+        assertEquals(0, VerticalPagerView.refreshStage(8, 0, 8, 50));
+        assertEquals(1, VerticalPagerView.refreshStage(36, 12, 8, 50));
+        assertEquals(2, VerticalPagerView.refreshStage(51, 11, 8, 50));
+    }
+    @Test public void reconnectStartsImmediatelyAndCapsTheDelay() {
+        long[] expected = {0, 1000, 2000, 4000, 8000, 16000, 16000, 16000};
+        for (int attempt = 0; attempt < expected.length; attempt++) {
+            assertEquals(expected[attempt], WatchProtocol.reconnectDelayMillis(attempt));
+        }
+    }
+
+    @Test public void executionAcknowledgmentsAndPerSlotHintsAreExplicit() throws Exception {
+        JSONObject ack = new JSONObject().put("v", 1).put("type", "execute_ack").put("status", "dispatched");
+        assertTrue(WatchProtocol.isExecuteAck(ack));
+        assertTrue(WatchProtocol.isExecuteAck(ack.put("status", "unknown")));
+        assertFalse(WatchProtocol.isExecuteAck(ack.put("status", "ready")));
+        assertFalse(WatchProtocol.isExecuteAck(ack.put("status", "blocked").put("type", "reply")));
+        JSONObject states = new JSONObject().put("lynk_unlock", "loading").put("climate", "unknown")
+                .put("lock", "ready");
+        assertEquals("加载中", WatchProtocol.controlHint(states, "lynk_unlock"));
+        assertEquals("状态未知", WatchProtocol.controlHint(states, "climate"));
+        assertEquals("", WatchProtocol.controlHint(states, "lock"));
+    }
+
+    @Test public void controlGridUsesShapeAndAspectRatio() {
+        assertEquals(2, WatchProtocol.controlColumns(true, 480, 480));
+        assertEquals(2, WatchProtocol.controlColumns(false, 400, 400));
+        assertEquals(1, WatchProtocol.controlColumns(false, 336, 396));
+        assertEquals(1, WatchProtocol.controlColumns(false, 336, 480));
+        assertEquals(1, WatchProtocol.controlColumns(false, 192, 490));
+    }
     @org.junit.Test public void lynkVoiceFiltersBrandAndUnverifiedActions() {
         org.junit.Assert.assertEquals("lynk_unlock", WatchProtocol.voiceAction("LYNKCO", "lynk_unlock"));
         org.junit.Assert.assertEquals("lynk_window", WatchProtocol.voiceAction("LYNKCO", "lynk_window"));
@@ -88,9 +122,11 @@ public final class WatchProtocolTest {
                 .put("fuelKm", 517)
                 .put("fuelPercent", 48);
         assertEquals("643 km", WatchProtocol.heroDisplay(hybrid));
-        assertEquals("97%", WatchProtocol.energyDisplay(hybrid, "electricKm", "electricPercent"));
-        assertEquals("517 km", WatchProtocol.energyDisplay(hybrid, "fuelKm", "fuelPercent"));
-        assertEquals("电 97% · 油 517 km", WatchProtocol.subrangeDisplay(hybrid));
+        WatchProtocol.EnergyBreakdown hybridEnergy = WatchProtocol.energyBreakdown(hybrid);
+        assertEquals("97%", hybridEnergy.electric());
+        assertEquals("517 km", hybridEnergy.fuel());
+        assertTrue(hybridEnergy.showElectric());
+        assertTrue(hybridEnergy.showFuel());
 
         JSONObject ev = new JSONObject().put("electricPercent", 84);
         assertEquals("84%", WatchProtocol.heroDisplay(ev));
@@ -98,8 +134,20 @@ public final class WatchProtocolTest {
         assertEquals("", WatchProtocol.heroUnit("84%"));
         assertEquals("301", WatchProtocol.heroNumber("301 km"));
         assertEquals(" km", WatchProtocol.heroUnit("301 km"));
-        assertEquals("电 84%", WatchProtocol.subrangeDisplay(ev));
-        assertEquals("— km", WatchProtocol.energyDisplay(ev, "fuelKm", "fuelPercent"));
+        WatchProtocol.EnergyBreakdown evEnergy = WatchProtocol.energyBreakdown(ev);
+        assertEquals("84%", evEnergy.electric());
+        assertEquals("— km", evEnergy.fuel());
+        assertTrue(evEnergy.showElectric());
+        assertFalse(evEnergy.showFuel());
+
+        WatchProtocol.EnergyBreakdown fuelOnly = WatchProtocol.energyBreakdown(new JSONObject().put("fuelKm", 0));
+        assertFalse(fuelOnly.showElectric());
+        assertTrue(fuelOnly.showFuel());
+        assertEquals("0 km", fuelOnly.fuel());
+
+        WatchProtocol.EnergyBreakdown unknown = WatchProtocol.energyBreakdown(null);
+        assertTrue(unknown.showElectric());
+        assertTrue(unknown.showFuel());
     }
 
     @Test public void adaptsRoundWatchHomeMetricsByDialSizeAndPreservesRectDefault() {

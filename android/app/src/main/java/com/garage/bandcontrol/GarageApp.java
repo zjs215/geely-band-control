@@ -14,6 +14,9 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
+import com.garage.appearance.ThemeConfig;
+import com.garage.appearance.ThemeStyles;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -32,6 +35,10 @@ public final class GarageApp extends Application {
     private static final String UNMAPPED = "请在手机核对银河小组件配置";
     private static final String VOICE_ENABLED = "miHomeVoiceEnabled";
     private static final String VEHICLE_NAME_KEY = "vehicleName";
+    private static final String PHONE_THEME_KEY = "phoneTheme";
+    private static final String WEARABLE_THEME_KEY = "wearableTheme";
+    private static final String BAND_DISPLAY_REV = "bandDisplayRevision";
+    private static final String BAND_DISPLAY_TWO_PAGE = "bandDisplayTwoPage";
     private static final int MAX_VEHICLE_NAME_LENGTH = 24;
     private static final long CONTROL_WAIT_MS = 5_000;
 
@@ -74,6 +81,9 @@ public final class GarageApp extends Application {
     private boolean voiceEnabled;
     private boolean voiceListenerConnected;
     private String vehicleName = DEFAULT_VEHICLE_NAME;
+    private ThemeConfig phoneTheme = ThemeConfig.CLASSIC;
+    private ThemeConfig wearableTheme = ThemeConfig.CLASSIC;
+    private BandDisplay bandDisplay = BandDisplay.INITIAL;
     private int armedCardId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private long lynkAuthorization;
     private Dispatch dispatch;
@@ -92,6 +102,17 @@ public final class GarageApp extends Application {
         prefs = getSharedPreferences("garage", MODE_PRIVATE);
         voiceEnabled = prefs.getBoolean(VOICE_ENABLED, false);
         vehicleName = normalizeVehicleName(prefs.getString(VEHICLE_NAME_KEY, DEFAULT_VEHICLE_NAME));
+        ThemeConfig savedWearableTheme = ThemeConfig.parse(prefs.getString(WEARABLE_THEME_KEY, ""));
+        if (savedWearableTheme != null) wearableTheme = savedWearableTheme;
+        ThemeConfig savedPhoneTheme = ThemeConfig.parse(prefs.getString(PHONE_THEME_KEY, ""));
+        if (savedPhoneTheme != null) {
+            phoneTheme = savedPhoneTheme;
+        } else if (!prefs.contains(PHONE_THEME_KEY)) {
+            // The old shared choice was saved under the wearable key. Copy it once on upgrade.
+            phoneTheme = wearableTheme;
+            prefs.edit().putString(PHONE_THEME_KEY, phoneTheme.encode()).apply();
+        }
+        bandDisplay = new BandDisplay(prefs.getBoolean(BAND_DISPLAY_TWO_PAGE, false), prefs.getLong(BAND_DISPLAY_REV, 0));
         try {
             JSONArray saved = new JSONArray(prefs.getString("uiEvents", "[]"));
             for (int i = Math.max(0, saved.length() - 40); i < saved.length(); i++) {
@@ -151,6 +172,35 @@ public final class GarageApp extends Application {
     boolean voiceListenerConnected() { return voiceListenerConnected; }
     String voiceTestResult() { return voiceTestResult; }
     String vehicleName() { return vehicleName; }
+
+    ThemeConfig phoneTheme() { return phoneTheme; }
+
+    void setPhoneTheme(ThemeConfig theme) {
+        if (phoneTheme.equals(theme)) return;
+        phoneTheme = theme;
+        prefs.edit().putString(PHONE_THEME_KEY, theme.encode()).apply();
+    }
+
+    ThemeConfig wearableTheme() { return wearableTheme; }
+
+    void setWearableTheme(ThemeConfig theme) {
+        if (wearableTheme.equals(theme)) return;
+        wearableTheme = theme;
+        prefs.edit().putString(WEARABLE_THEME_KEY, theme.encode()).apply();
+    }
+
+    BandDisplay bandDisplay() { return bandDisplay; }
+
+    void selectBandDisplay(boolean twoPage) {
+        saveBandDisplay(bandDisplay.select(twoPage));
+    }
+
+    private void saveBandDisplay(BandDisplay next) {
+        if (next.equals(bandDisplay)) return;
+        bandDisplay = next;
+        prefs.edit().putBoolean(BAND_DISPLAY_TWO_PAGE, next.twoPage()).putLong(BAND_DISPLAY_REV, next.revision()).apply();
+        changed();
+    }
 
     static String normalizeVehicleName(String raw) {
         if (raw == null) return DEFAULT_VEHICLE_NAME;
@@ -411,9 +461,16 @@ public final class GarageApp extends Application {
             if (request == null) return;
             Log.i(TAG, "event=request_received" + requestFields(request));
             switch (request.type()) {
-                case "hello" -> send(node, request.id(),
-                        () -> BandMessage.helloReply(request.id(), BuildConfig.VERSION_NAME).put("brand", brand.brand.name()));
-                case "status" -> reply(node, request, "ready", "已读取手机车况");
+                case "hello" -> send(node, request.id(), () -> {
+                    JSONObject hello = BandMessage.helloReply(request.id(), BuildConfig.VERSION_NAME)
+                            .put("brand", brand.brand.name());
+                    hello.getJSONArray("features").put(BandMessage.COMPACT_EXECUTE_ACK);
+                    return hello;
+                });
+                case "status" -> {
+                    if (!BluetoothWatchLink.handlesNode(node)) saveBandDisplay(bandDisplay.accept(request.bandDisplay()));
+                    reply(node, request, "ready", "已读取手机车况");
+                }
                 case "refresh" -> refresh((state, note) -> reply(node, request, state, note));
                 case "prepare" -> prepare(node, request);
                 case "execute" -> execute(node, request);
@@ -717,7 +774,11 @@ public final class GarageApp extends Application {
         if ("refresh".equals(request.type())) {
             note(note, "手环刷新", !"refreshed".equals(state));
         }
-        send(node, request.id(), () -> BandMessage.reply(request.id(), state, note));
+        if ("execute".equals(request.type()) && request.compactAck()) {
+            sendReply(node, request.id(), () -> BandMessage.executeAck(request.id(), state, note));
+        } else {
+            send(node, request.id(), () -> BandMessage.reply(request.id(), state, note));
+        }
     }
 
     private void sendCarImageChunk(String node, BandMessage request) {
@@ -738,7 +799,15 @@ public final class GarageApp extends Application {
     }
 
     private void send(String node, String id, BandMessage.ReplyBuilder builder) {
-        String text = BandMessage.encodeReply(id, () -> withState(builder.build()),
+        sendReply(node, id, () -> {
+            JSONObject response = withState(builder.build());
+            if (!BluetoothWatchLink.handlesNode(node)) response.put("bandDisplay", bandDisplay.json());
+            return response;
+        });
+    }
+
+    private void sendReply(String node, String id, BandMessage.ReplyBuilder builder) {
+        String text = BandMessage.encodeReply(id, builder,
                 error -> Log.e(TAG, "event=reply_state_failed id=" + id, error));
         link.send(node, text,
                 reason -> {
@@ -752,6 +821,7 @@ public final class GarageApp extends Application {
         JSONArray mapped = new JSONArray();
         response.put("mode", "live")
                 .put("vehicleName", vehicleName)
+                .put("theme", wearableTheme.forWearableSync(ThemeStyles.systemVariant(this)).json())
                 .put("brand", brand.brand.name()).put("available", available).put("mapped", mapped).put("vehicle", widgets.vehicle().json());
 
         ControlPause pause = controlPause();
@@ -759,14 +829,13 @@ public final class GarageApp extends Application {
         JSONObject blocked = new JSONObject();
         JSONObject directions = new JSONObject();
         JSONObject labels = new JSONObject();
+        JSONObject states = new JSONObject();
         for (Map.Entry<CarAction, GalaxyWidgets.Control> entry : widgets.controls().entrySet()) {
             String id = entry.getKey().id;
             GalaxyWidgets.Control control = entry.getValue();
             mapped.put(id);
-            if (brand == BrandConfig.LYNKCO && control.target() != null) {
-                String label = control.target().lynkShortLabel();
-                if (!label.isEmpty()) labels.put(id, label);
-            }
+            if (!control.slotLabel().isEmpty()) labels.put(id, control.slotLabel());
+            if (!control.slotState().isEmpty()) states.put(id, control.slotState());
             if (control.ready()) {
                 GalaxyWidgets.Target target = control.target();
                 if (entry.getKey() == CarAction.LOCK) response.put("lockState", target.lockState());
@@ -779,6 +848,7 @@ public final class GarageApp extends Application {
         if (!notice.isEmpty()) response.put("controlNotice", notice);
         if (blocked.length() > 0) response.put("blocked", blocked);
         if (brand == BrandConfig.LYNKCO) response.put("controlLabels", labels);
+        if (states.length() > 0) response.put("controlStates", states);
         CarImage.Packaged carImage = widgets.carImage();
         if (carImage != null) {
             loggedMissingCarImage = false;
