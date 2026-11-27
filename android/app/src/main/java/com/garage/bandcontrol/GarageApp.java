@@ -372,7 +372,7 @@ public final class GarageApp extends Application {
     private void onWidgetChange(int id) {
         if (brand == BrandConfig.LYNKCO) confirmations.clear();
         GalaxyWidgets.Card card = widgets.primary();
-        if (brand == BrandConfig.GEELY && card != null && id == card.id
+        if (brand.recognizedIconsOnly() && card != null && id == card.id
                 && (widgets.showsSetup(card) || widgets.showsUnavailable(card))) disarm();
         if (armedCardId != AppWidgetManager.INVALID_APPWIDGET_ID && !isArmed()) {
             armedCardId = AppWidgetManager.INVALID_APPWIDGET_ID;
@@ -509,8 +509,8 @@ public final class GarageApp extends Application {
     }
 
     private void prepare(String node, BandMessage request) {
-        if (request.brand().isEmpty() && brand == BrandConfig.GEELY) {
-            reply(node, request, "blocked", "请更新穿戴端后使用吉利汽车车控");
+        if (request.brand().isEmpty() && brand.recognizedIconsOnly()) {
+            reply(node, request, "blocked", "请更新穿戴端后使用" + brand.name + "车控");
             return;
         }
         if (!request.brand().isEmpty() && !brand.brand.name().equals(request.brand())) {

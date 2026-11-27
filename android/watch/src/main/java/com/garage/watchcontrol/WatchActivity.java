@@ -1152,7 +1152,8 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
 
     private void showDefaultCarImage() {
         if (carImageView == null) return;
-        carImageView.setImageBitmap(assetBitmap("starshine-8.png"));
+        if ("ZEEKR".equals(brand)) carImageView.setImageDrawable(null);
+        else carImageView.setImageBitmap(assetBitmap("starshine-8.png"));
     }
 
     private void loadCachedCarImage() {
@@ -1199,13 +1200,14 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     }
 
     private static String normalizeBrand(String value) {
-        return "LYNKCO".equals(value) || "GEELY".equals(value) ? value : "GALAXY";
+        return "LYNKCO".equals(value) || "GEELY".equals(value) || "ZEEKR".equals(value) ? value : "GALAXY";
     }
 
     private String brandName() {
         return switch (brand) {
             case "LYNKCO" -> "领克";
             case "GEELY" -> "吉利汽车";
+            case "ZEEKR" -> "极氪";
             default -> "银河";
         };
     }

@@ -789,12 +789,12 @@ export default {
       return
     }
     if ((this.snapshotChecked || this.hasReply) && this.carImageChecked && !this.carImageSrc) {
-      this.carImageSrc = this.brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+      this.carImageSrc = this.defaultCarImage()
     }
   },
 
   onCarImageError() {
-    const fallback = this.brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+    const fallback = this.defaultCarImage()
     if (!this.carImageSrc || this.carImageSrc === fallback) return
     if (this.carImageFromCache) {
       // A missing cache file can be recovered from the next status reply, even if its hash has not changed.
@@ -1775,11 +1775,16 @@ export default {
   },
 
   normalizeBrand(value) {
-    return value === 'LYNKCO' || value === 'GEELY' ? value : 'GALAXY'
+    return value === 'LYNKCO' || value === 'GEELY' || value === 'ZEEKR' ? value : 'GALAXY'
   },
 
   brandName() {
+    if (this.brand === 'ZEEKR') return '极氪'
     return this.brand === 'LYNKCO' ? '领克' : this.brand === 'GEELY' ? '吉利汽车' : '银河'
+  },
+
+  defaultCarImage() {
+    return this.brand === 'LYNKCO' || this.brand === 'ZEEKR' ? '' : DEFAULT_CAR_IMAGE
   },
 
   applyBrand(value) {
@@ -1797,7 +1802,7 @@ export default {
     this.controlStates = {}
     this.imageSync = null
     this.carImageHash = ''
-    this.carImageSrc = brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+    this.carImageSrc = this.defaultCarImage()
     this.controlIconHashes = {}
     this.controlIconUris = {}
     this.failedControlIconHashes = {}

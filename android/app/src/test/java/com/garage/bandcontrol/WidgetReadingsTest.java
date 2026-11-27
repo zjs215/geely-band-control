@@ -12,6 +12,22 @@ public final class WidgetReadingsTest {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final long NOW = Instant.parse("2026-11-24T01:16:00Z").toEpochMilli();
 
+    @Test public void zeekrRequiresAProviderTimeAndPreservesExplicitUnits() {
+        assertEquals(VehicleStatus.EMPTY, WidgetReadings.parse(BrandConfig.ZEEKR, distance("277", "km"),
+                energy("666", "km", null), energy("666", "km", null), "", "", NOW, SHANGHAI));
+        VehicleStatus electric = WidgetReadings.parse(BrandConfig.ZEEKR, distance("50", "%"),
+                energy("", "", null), energy("", "", null), "已插枪(交流)", "上次更新 11-24 09:15", NOW, SHANGHAI);
+        assertNull(electric.totalKm());
+        assertEquals(Integer.valueOf(50), electric.electricPercent());
+        assertEquals(NOW - 60_000, electric.updatedAt());
+        VehicleStatus hybrid = WidgetReadings.parse(BrandConfig.ZEEKR, distance("700", "km"),
+                energy("105km", "", null), energy("600km", "", null), "", "上次更新 11-24 09:15", NOW, SHANGHAI);
+        assertEquals(Integer.valueOf(700), hybrid.totalKm());
+        assertEquals(Integer.valueOf(105), hybrid.electricKm());
+        assertEquals(Integer.valueOf(600), hybrid.fuelKm());
+        assertNull(hybrid.electricPercent());
+    }
+
     @Test public void keepsFieldIdentityEvenWhenTheRangesDoNotAddUp() {
         VehicleStatus status = WidgetReadings.parse(distance("700", "km"), energy("76", "km", 79),
                 energy("658 km", "", 43), "已驻车", "11-24 09:15", NOW, SHANGHAI);

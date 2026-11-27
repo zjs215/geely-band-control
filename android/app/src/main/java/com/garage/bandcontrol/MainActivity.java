@@ -255,7 +255,9 @@ public final class MainActivity extends Activity {
         add(setupPanel, text("银河官方小组件".replace("银河", app.brand.name), 19, INK, true), 0);
         setupStatus = text("", 14, MUTED, false);
         add(setupPanel, setupStatus, 5);
-        addWidget = button("添加银河中号小组件".replace("银河", app.brand.name), this::bindWidget);
+        String addWidgetLabel = app.brand == BrandConfig.ZEEKR ? "添加极氪大号小组件"
+                : "添加" + app.brand.name + "中号小组件";
+        addWidget = button(addWidgetLabel, this::bindWidget);
         addWidget.setActivated(true);
         add(setupPanel, addWidget, 12);
         add(screen, setupPanel, 18);
@@ -301,7 +303,8 @@ public final class MainActivity extends Activity {
         accessBounds.setMarginStart(dp(8));
         voiceActions.addView(button("指令码", this::showVoiceCommands), accessBounds);
         add(voicePanel, voiceActions, 10);
-        add(voicePanel, text("无需手环或手表，开启「允许车控」与通知权限后，通过小爱触发米家场景即可控车。",
+        add(voicePanel, text(app.brand == BrandConfig.ZEEKR ? "极氪目前提供米家通知测试。"
+                : "无需手环或手表，开启「允许车控」与通知权限后，通过小爱触发米家场景即可控车。",
                 13, MUTED, false), 8);
         add(screen, voicePanel, 12);
 
@@ -496,8 +499,8 @@ public final class MainActivity extends Activity {
         updateBandControls(app.widgets.controls());
         if (app.widgets.showsUnavailable(card)) {
             mappingStatus.setText("当前车辆不支持远程控制");
-        } else if (app.brand == BrandConfig.GEELY && app.widgets.showsSetup(card)) {
-            mappingStatus.setText("请在吉利汽车 App 绑定车辆并配置小组件");
+        } else if (app.brand.recognizedIconsOnly() && app.widgets.showsSetup(card)) {
+            mappingStatus.setText("请在" + app.brand.appName + " App 绑定车辆并配置小组件");
         }
         preview.updateAccessibility();
     }
@@ -620,9 +623,11 @@ public final class MainActivity extends Activity {
         }
         lynkIconStatus.setVisibility(recognized.isEmpty() ? View.GONE : View.VISIBLE);
         if (!recognized.isEmpty()) lynkIconStatus.setText("自动识别 · " + String.join("、", recognized));
-        String setupHint = app.brand == BrandConfig.GEELY ? "请刷新车况或在吉利汽车 App 核对小组件按钮"
+        String setupHint = app.brand.recognizedIconsOnly() ? "请刷新车况或在" + app.brand.appName + " App 核对小组件按钮"
                 : "请先刷新车况或点按上方预览卡片补标按钮";
-        controlStatus.setText(armed ? "车控已授权 · 可用米家语音或穿戴端控车"
+        String armedHint = app.brand == BrandConfig.ZEEKR ? "车控已授权 · 可用穿戴端控车"
+                : "车控已授权 · 可用米家语音或穿戴端控车";
+        controlStatus.setText(armed ? armedHint
                 : hasReady ? "车控未授权 · 点击下方允许后即可控车" : setupHint);
         liveControl.setText(armed ? "关闭车控" : "允许车控");
         liveControl.setActivated(!armed);
@@ -844,8 +849,8 @@ public final class MainActivity extends Activity {
                     .setPositiveButton("知道了", null).show();
             return;
         }
-        if (app.brand == BrandConfig.GEELY) {
-            toast("此按钮尚未识别，请在吉利汽车 App 核对");
+        if (app.brand.recognizedIconsOnly()) {
+            toast("此按钮尚未识别，请在" + app.brand.appName + " App 核对");
             return;
         }
         CarAction[] actions = Arrays.stream(CarAction.values()).filter(action -> !action.id.startsWith("lynk_")).toArray(CarAction[]::new);

@@ -51,6 +51,15 @@ final class WidgetIcons {
 
     private List<Icon> load(Resources resources) {
         List<Icon> icons = new ArrayList<>();
+        if (config == BrandConfig.ZEEKR) {
+            add(icons, resources, new Match(CarAction.LOCK, WidgetTree.LOCKED), "lock");
+            add(icons, resources, new Match(CarAction.LOCK, WidgetTree.UNLOCKED), "unlock");
+            add(icons, resources, new Match(CarAction.CLIMATE, "", ControlDirection.OPEN), "air");
+            add(icons, resources, new Match(CarAction.CLIMATE, "", ControlDirection.CLOSE), "air_open");
+            add(icons, resources, new Match(CarAction.FIND, ""), "search");
+            add(icons, resources, new Match(CarAction.TRUNK, ""), "back", "back_suv", "back_mpv");
+            return icons;
+        }
         if (config == BrandConfig.GEELY) {
             add(icons, resources, new Match(CarAction.LOCK, WidgetTree.LOCKED), "black_lock", "white_lock");
             add(icons, resources, new Match(CarAction.LOCK, WidgetTree.UNLOCKED), "black_unlock", "white_unlock");

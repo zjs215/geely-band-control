@@ -11,6 +11,7 @@
     <queries>
         <package android:name="com.geelygalaxy.customer" />
         <package android:name="com.geely.consumer" />
+        <package android:name="com.zeekrlife.mobile" />
         <package android:name="com.lynkco.customer" />
     </queries>
 

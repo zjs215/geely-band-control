@@ -59,6 +59,8 @@ final class WidgetReadings {
         Integer totalKm = total.kilometers();
         Integer electricKm = electric.distance().kilometers();
         Integer fuelKm = fuel.distance().kilometers();
+        Integer electricPercent = config == BrandConfig.ZEEKR && electric.percent() == null
+                ? total.percent() : electric.percent();
         if (config == BrandConfig.GEELY && "更新于03/15 12:00".equals(label)
                 && totalKm == null && electricKm == null && fuelKm == null) {
             return VehicleStatus.EMPTY;
@@ -71,10 +73,10 @@ final class WidgetReadings {
             return VehicleStatus.EMPTY;
         }
         if (totalKm == null && electricKm == null && fuelKm == null
-                && electric.percent() == null && fuel.percent() == null) {
+                && electricPercent == null && fuel.percent() == null) {
             return VehicleStatus.EMPTY;
         }
-        return new VehicleStatus(totalKm, electricKm, fuelKm, electric.percent(), fuel.percent(),
+        return new VehicleStatus(totalKm, electricKm, fuelKm, electricPercent, fuel.percent(),
                 motion.trim(), updatedAt, label);
     }
 

@@ -42,7 +42,7 @@ final class WidgetTree {
     }
 
     VehicleStatus read(View root, long now, ZoneId zone) {
-        if (loading(root)) return VehicleStatus.EMPTY;
+        if (loading(root) || showsZeekrGuest(root)) return VehicleStatus.EMPTY;
         View mileage = named(root, config.mileage);
         View alarm = named(root, config.alarm);
         View motion = named(alarm, config.motion);
@@ -125,9 +125,12 @@ final class WidgetTree {
 
     List<Button> buttons(ViewGroup root, String providerVersion, boolean controlsReady, WidgetIcons icons) {
         List<Button> buttons = new ArrayList<>();
-        if (confirmationVisible(root)) return buttons;
+        if (confirmationVisible(root) || showsZeekrGuest(root)) return buttons;
 
-        View settings = named(root, config.settings);
+        View settings = config == BrandConfig.ZEEKR
+                ? unique(root, view -> (config.settings.equals(resource(view)) || "iv_widget_setting".equals(resource(view)))
+                        && clickable(view, root))
+                : named(root, config.settings);
         if (clickable(settings, root)) {
             buttons.add(new Button(settings, config.settings, "", bounds(root, settings), "配置", config.settings,
                     null, null));
@@ -179,9 +182,18 @@ final class WidgetTree {
         return named(root, config.confirm) != null;
     }
 
+    boolean showsZeekrGuest(View root) {
+        return config == BrandConfig.ZEEKR
+                && (named(root, "fl_visitor") != null || named(root, config.mileage) == null);
+    }
+
 
     ImageView vehicleImage(ViewGroup root) {
         if (root == null || root.getWidth() <= 0 || root.getHeight() <= 0) return null;
+        if (config == BrandConfig.ZEEKR) {
+            View car = named(root, "iv_vehicle_image");
+            return car instanceof ImageView image && image.getDrawable() != null ? image : null;
+        }
         if (config == BrandConfig.LYNKCO) {
             View car = named(root, "car_img");
             return car instanceof ImageView image && image.getDrawable() != null ? image : null;
