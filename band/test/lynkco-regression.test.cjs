@@ -599,7 +599,7 @@ test('layout profile adapts to Band 10 capsule, circular Watch 5, and Band 10 Pr
     assert.equal(circle.page.ui.confirmation, 'confirmation confirmation-circle')
     assert.equal(
       circle.page.watchHomeUi.car,
-      expectedHomeSize === 'standard' ? 'watch-car' : 'watch-car watch-car-' + expectedHomeSize
+      (expectedHomeSize === 'standard' ? 'watch-car' : 'watch-car watch-car-' + expectedHomeSize) + ' watch-car-circle'
     )
     circle.hello()
     circle.reply({ mapped: ['lock', 'climate', 'window_vent', 'trunk'], available: ['climate'] })

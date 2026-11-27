@@ -675,7 +675,7 @@ test('layout keeps two columns for round and square displays and one for tall di
     assert.equal(circle.page.ui.confirmActions, 'confirm-actions confirm-actions-circle')
     assert.equal(
       circle.page.watchHomeUi.car,
-      expectedHomeSize === 'standard' ? 'watch-car' : 'watch-car watch-car-' + expectedHomeSize
+      (expectedHomeSize === 'standard' ? 'watch-car' : 'watch-car watch-car-' + expectedHomeSize) + ' watch-car-circle'
     )
     circle.hello()
     circle.reply({ mapped: ['lock', 'climate', 'window_vent', 'trunk'], available: ['climate'] })

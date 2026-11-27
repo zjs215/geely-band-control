@@ -1769,6 +1769,12 @@ export default createGaragePage({ lite: false })
   height: 138px;
   margin-top: 12px;
 }
+/* Circle watches: narrow the car image to stay within the circular screen boundary */
+.watch-car-circle {
+  width: 288px;
+  height: 116px;
+  margin-top: 6px;
+}
 .watch-controls-page-tall {
   padding: 14px 18px 14px;
 }

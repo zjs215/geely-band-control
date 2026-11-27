@@ -161,6 +161,7 @@ export function watchHomeClasses(size, profile = 'circle', shortRect = false) {
     }
   }
   if (shortRect) result.car += ' watch-car-short'
+  if (profile === 'circle' || profile === 'square') result.car += ' watch-car-circle'
   return result
 }
 

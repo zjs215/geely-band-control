@@ -1,7 +1,7 @@
 <template>
   <stack class="page">
     <div class="home-layout-pending" if="{{ !homeLayoutReady }}"></div>
-    <scroll class="{{ ui.scrollPage + themeStage }}" scroll-y="true" if="{{ homeLayoutReady && !useTwoPageShell }}">
+    <scroll class="{{ ui.scrollPage }}" scroll-y="true" if="{{ homeLayoutReady && !useTwoPageShell }}">
       <div class="{{ ui.homeScreen }}">
         <div class="{{ ui.range + themePanelClass }}" @click="toggleRange">
           <div class="{{ ui.rangeHeader }}">
@@ -1187,6 +1187,12 @@ export default createGaragePage({ lite: true })
 .watch-car-short {
   height: 138px;
   margin-top: 10px;
+}
+/* Circle watches: narrow the car image to stay within the circular screen boundary */
+.watch-car-circle {
+  width: 288px;
+  height: 116px;
+  margin-top: 6px;
 }
 .watch-controls-page-tall {
   padding: 14px 18px 14px;
