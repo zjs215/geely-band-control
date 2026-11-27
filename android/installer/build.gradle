@@ -1,0 +1,116 @@
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+import java.util.zip.ZipFile
+
+plugins {
+    id 'com.android.application' version '8.13.2'
+}
+
+def fullRpk = 'galaxy-vela-band.rpk'
+def watchApk = 'galaxy-watch.apk'
+def productPackage = 'com.garage.bandcontrol'
+def packageDir = providers.gradleProperty('wearablePackageDir').map { file(it) }
+    .getOrElse(file('../../artifacts'))
+def assetsDir = layout.buildDirectory.dir('generated/assets/wearable')
+
+android {
+    namespace 'com.garage.bandcontrol.installer'
+    compileSdk 36
+    buildToolsVersion '36.0.0'
+
+    defaultConfig {
+        applicationId 'com.garage.bandcontrol.installer'
+        minSdk 28
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+    }
+
+    sourceSets.main.assets.srcDir assetsDir
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    packaging {
+        resources {
+            merges += ['META-INF/LICENSE*', 'META-INF/NOTICE*']
+            excludes += ['META-INF/versions/**']
+        }
+    }
+}
+
+def prepareWearableAssets = tasks.register('prepareWearableAssets') {
+    def checksumsFile = new File(packageDir, 'SHA256SUMS.txt')
+    def rpkFile = new File(packageDir, fullRpk)
+    def watchFile = new File(packageDir, watchApk)
+    inputs.files(checksumsFile, rpkFile, watchFile)
+    outputs.dir(assetsDir)
+    doLast {
+        def checksums = [:]
+        checksumsFile.eachLine('UTF-8') { line ->
+            def entry = line.trim() =~ /^([a-fA-F0-9]{64})\s+(\S+)$/
+            if (entry.matches()) checksums[entry.group(2)] = entry.group(1).toLowerCase(Locale.ROOT)
+        }
+
+        def sealedDir = assetsDir.get().dir('wearable').asFile
+        sealedDir.mkdirs()
+        def metadata = new Properties()
+        [band: rpkFile, watch: watchFile].each { target, source ->
+            byte[] data = source.bytes
+            String digest = MessageDigest.getInstance('SHA-256').digest(data).encodeHex().toString()
+            if (data.length == 0 || digest != checksums[source.name]) {
+                throw new GradleException('Check ' + source.name + ' against SHA256SUMS.txt in ' + packageDir)
+            }
+            new File(sealedDir, source.name).bytes = data
+            metadata.setProperty(target + '.name', source.name)
+            metadata.setProperty(target + '.size', Integer.toString(data.length))
+            metadata.setProperty(target + '.sha256', digest)
+        }
+
+        def manifest
+        new ZipFile(new File(sealedDir, fullRpk)).withCloseable { zip ->
+            def entry = zip.getEntry('manifest.json')
+            if (entry == null || zip.getEntry('META-INF/CERT') == null ||
+                    !zip.entries().any { it.name.startsWith('common/themes/') && it.name.endsWith('.jpg') }) {
+                throw new GradleException('The Band 10 Pro requires the signed full galaxy-vela-band.rpk')
+            }
+            zip.getInputStream(entry).withCloseable { stream -> manifest = new JsonSlurper().parse(stream) }
+        }
+        if (manifest.package != productPackage || !manifest.deviceTypeList?.contains('watch') ||
+                !manifest.versionName || !(manifest.versionCode instanceof Number) || manifest.versionCode <= 0) {
+            throw new GradleException('Incorrect wrist app manifest in galaxy-vela-band.rpk')
+        }
+
+        def suffix = System.getProperty('os.name').startsWith('Windows') ? '.exe' : ''
+        def versionDir = new File(android.sdkDirectory, 'build-tools/' + android.buildToolsVersion)
+        def aapt = new File(versionDir, 'aapt' + suffix)
+        def stagedWatch = new File(sealedDir, watchApk)
+        def badging = providers.exec {
+            commandLine aapt, 'dump', 'badging', stagedWatch
+        }.standardOutput.asText.get()
+        def details = badging =~ /(?m)^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/
+        def watchManifest = providers.exec {
+            commandLine aapt, 'dump', 'xmltree', stagedWatch, 'AndroidManifest.xml'
+        }.standardOutput.asText.get()
+        if (!details.find() || details.group(1) != productPackage ||
+                !watchManifest.contains('android.hardware.type.watch') ||
+                !watchManifest.contains('com.garage.watchcontrol.WatchActivity')) {
+            throw new GradleException('galaxy-watch.apk must be the wrist app APK')
+        }
+        metadata.setProperty('band.version', manifest.versionName.toString())
+        metadata.setProperty('band.versionCode', manifest.versionCode.toString())
+        metadata.setProperty('watch.version', details.group(3))
+        metadata.setProperty('watch.versionCode', details.group(2))
+        new File(sealedDir, 'packages.properties').withOutputStream { metadata.store(it, null) }
+    }
+}
+
+tasks.named('preBuild') {
+    dependsOn prepareWearableAssets
+}
+
+dependencies {
+    implementation 'com.github.osservatorionessuno:libadb-android-bc:3.5.1'
+    implementation 'org.bouncycastle:bcpkix-jdk15to18:1.84'
+    testImplementation 'junit:junit:4.13.2'
+}

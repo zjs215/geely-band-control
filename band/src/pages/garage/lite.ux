@@ -1,0 +1,1374 @@
+<template>
+  <stack class="page">
+    <scroll class="{{ ui.scrollPage + themeStage }}" scroll-y="true" if="{{ homeLayoutReady && !useTwoPageShell }}">
+      <div class="{{ ui.homeScreen }}">
+        <div class="{{ ui.range + themePanelClass }}" @click="toggleRange">
+          <div class="{{ ui.rangeHeader }}">
+            <text class="{{ ui.model + themeInk }}">{{ vehicleName }}</text>
+            <text class="{{ ui.motion + themeMuted }}">{{ motion || '—' }}</text>
+          </div>
+          <div class="range-summary" if="{{ !showTotalRange }}">
+            <text class="{{ ui.distance + ' range-total' + themeInk }}"><span class="{{ ui.totalLabel + themeInk }}">总里程: </span>{{ total }}<span class="{{ ui.unit + themeMuted }}">{{ totalUnit }}</span></text>
+            <div class="range-breakdown range-breakdown-summary">
+              <div class="range-breakdown-reading" for="{{ rangeBreakdown }}" tid="id">
+                <image class="{{ 'range-breakdown-icon' + (layoutProfile === 'capsule' ? ' range-breakdown-icon-narrow' : '') }}" src="{{ themeIconPath + 'energy-' + $item.id + '.png' }}"></image>
+                <text class="{{ 'range-breakdown-value' + (layoutProfile === 'capsule' ? ' range-breakdown-value-narrow' : '') + themeMuted }}">{{ $item.value }}</text>
+              </div>
+            </div>
+          </div>
+          <image class="{{ ui.vehicleImage }}" if="{{ carImageSrc }}" src="{{ carImageSrc }}" @error="onCarImageError"></image>
+          <div class="{{ ui.split }}" if="{{ showTotalRange }}">
+            <div class="{{ ui.energy + themeControl }}">
+              <div class="{{ ui.energyReading }}">
+                <image class="{{ ui.energyIcon }}" src="{{ themeIconPath + 'energy-electric.png' }}"></image>
+                <text class="{{ (electric.length > 3 ? ui.distanceCompact : ui.distance) + themeInk }}">{{ electric }}<span class="{{ ui.unit + themeMuted }}">{{ electricUnit }}</span></text>
+              </div>
+              <div class="{{ ui.energyTrack }}">
+                <div class="{{ ui.energyFill }} electric-fill" if="{{ electricPercent > 0 }}" style="width: {{ electricPercent }}%"></div>
+              </div>
+            </div>
+            <div class="{{ ui.energy + themeControl }}">
+              <div class="{{ ui.energyReading }}">
+                <image class="{{ ui.energyIcon }}" src="{{ themeIconPath + 'energy-fuel.png' }}"></image>
+                <text class="{{ (fuel.length > 3 ? ui.distanceCompact : ui.distance) + themeInk }}">{{ fuel }}<span class="{{ ui.unit + themeMuted }}">{{ fuelUnit }}</span></text>
+              </div>
+              <div class="{{ ui.energyTrack }}">
+                <div class="{{ ui.energyFill }} fuel-fill" if="{{ fuelPercent > 0 }}" style="width: {{ fuelPercent }}%"></div>
+              </div>
+            </div>
+          </div>
+          <div class="{{ ui.rangeIndicators }}">
+            <div class="{{ showTotalRange ? ui.rangeDot : ui.activeRangeDot }}"></div>
+            <div class="{{ showTotalRange ? ui.activeRangeDot : ui.rangeDot }}"></div>
+          </div>
+        </div>
+        <div class="{{ ui.vehicleMeta + themePanelClass }}">
+          <div class="{{ ui.refresh }}" @click="refresh">
+            <image class="{{ ui.refreshIcon }}" src="{{ themeIconPath + 'refresh.png' }}"></image>
+            <text class="{{ ui.updated + themeMuted }}">{{ refreshText }}</text>
+          </div>
+          <div class="{{ ui.metaDivider }}"></div>
+          <div class="{{ ui.connection }}" @click="refresh">
+            <div class="{{ ui.connectionStatus }}">
+              <div class="{{ modeLabel === '已连接' || modeLabel === '演示' ? ui.dot + (themeDay ? ' online-day' : ' online') : ui.dot }}"></div>
+              <text class="{{ ui.mode + themeMuted }}">{{ modeLabel }}</text>
+            </div>
+          </div>
+        </div>
+        <text class="{{ ui.empty + themeMuted + themeControl }}" if="{{ compatibilityNotice }}">{{ compatibilityNotice }}</text>
+        <div class="{{ ui.grid }}" if="{{ !compatibilityNotice }}">
+          <div class="{{ ui.controlRow }}" for="{{ displayRows }}" tid="id">
+            <div class="{{ $item.first.style + themeTileClass + $item.first.tileStateStyle }}" @click="select($item.first.id)">
+              <div class="{{ $item.first.symbolStyle + themeTileIconClass }}">
+                <image class="{{ $item.first.iconStyle }}" src="{{ $item.first.icon }}" @error="onControlIconError($item.first.id)"></image>
+              </div>
+              <div class="{{ $item.first.copyStyle }}">
+                <text class="{{ $item.first.labelStyle + $item.first.labelToneStyle }}">{{ $item.first.displayLabel }}</text>
+                <text if="{{ $item.first.displayHint }}" class="{{ $item.first.hintStyle + themeMuted }}">{{ $item.first.displayHint }}</text>
+              </div>
+            </div>
+          </div>
+          <text class="{{ ui.empty + themeMuted + themeControl }}" if="{{ displayRows.length === 0 }}">{{ emptyLabel }}</text>
+        </div>
+      </div>
+    </scroll>
+    <stack class="{{ hasThemeSurface ? 'watch-shell' + themeStage : 'watch-shell watch-shell-classic' }}" if="{{ homeLayoutReady && useTwoPageShell }}">
+      <swiper id="watchSwiper" class="watch-swiper" vertical="true" indicator="false" loop="false" focusable="true" enableswipe="{{ !confirmTitle }}" index="{{ watchPage }}" @change="onWatchPageChange">
+        <div class="{{ watchHomeUi.mileagePage + (hasThemeSurface ? themeStage : ' watch-mileage-page-classic') }}">
+          <div class="{{ 'watch-connection-row' + (layoutProfile === 'rect' ? ' watch-connection-row-rect' : '') }}">
+            <text class="{{ 'watch-model-top-left' + themeInk }}" if="{{ layoutProfile === 'rect' }}">{{ vehicleName }}</text>
+            <div class="watch-connection" @click="refresh">
+              <div class="{{ (modeLabel === '已连接' || modeLabel === '演示') ? (themeDay ? 'dot online-day' : 'dot online') : 'dot' }}"></div>
+              <text class="{{ 'watch-connection-text' + themeInk }}">{{ modeLabel }}</text>
+            </div>
+          </div>
+          <div class="{{ watchHomeUi.heroHeader }}">
+            <text class="{{ watchHomeUi.model + themeInk }}" if="{{ layoutProfile !== 'rect' }}">{{ vehicleName }}</text>
+            <div class="watch-hero-num-row">
+              <text class="{{ watchHomeUi.heroUnitGhost }}">{{ totalUnit || ' km' }}</text>
+              <text class="{{ watchHomeUi.hero + themeInk }}">{{ total }}</text>
+              <text class="{{ watchHomeUi.heroUnit + themeMuted }}">{{ totalUnit }}</text>
+            </div>
+            <div class="watch-energy-summary">
+              <div class="watch-energy-item" for="{{ rangeBreakdown }}" tid="id">
+                <div class="watch-energy-reading">
+                  <image class="watch-energy-icon" src="{{ themeIconPath + 'energy-' + $item.id + '.png' }}"></image>
+                  <text class="{{ 'watch-energy-value' + themeInk }}">{{ $item.value }}</text>
+                </div>
+                <div class="{{ 'watch-energy-track' + (themeDay ? ' watch-energy-track-day' : '') }}">
+                  <div class="{{ 'watch-energy-fill ' + $item.id + '-fill' }}" if="{{ $item.percent > 0 }}" style="width: {{ $item.percent }}%"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <image class="{{ watchHomeUi.car }}" if="{{ carImageSrc }}" src="{{ carImageSrc }}" @error="onCarImageError"></image>
+          <div class="watch-home-footer">
+            <div class="watch-motion-group">
+              <image class="watch-motion-icon" if="{{ motion === '已驻车' }}" src="{{ themeIconPath + 'parking-status.png' }}"></image>
+              <text class="{{ 'watch-motion' + themeInk }}">{{ motion }}</text>
+            </div>
+            <div class="watch-next-page" @click="setWatchPage(1)">
+              <image class="watch-next-icon" src="{{ themeIconPath + 'chevron-down.png' }}"></image>
+            </div>
+          </div>
+        </div>
+        <div class="{{ watchControlsUi.controlsPage + (hasThemeSurface ? themeStage : ' watch-controls-page-classic') }}"
+             @touchstart="startControlsPull" @touchmove="moveControlsPull" @touchend="endControlsPull">
+          <div class="{{ watchControlsUi.topPill }}" @click="refresh">
+            <image class="{{ watchControlsUi.refreshIcon }}" src="{{ themeIconPath + 'refresh.png' }}"></image>
+            <text class="{{ watchControlsUi.topText + themeInk }}">{{ controlsPullText || refreshText }}</text>
+            <div class="{{ 'watch-pull-progress' + (themeDay ? ' watch-pull-progress-day' : '') }}" if="{{ controlsPullProgress > 0 || refreshing }}">
+              <div class="{{ 'watch-pull-fill' + (themeDay ? ' watch-pull-fill-day' : '') }}" style="width: {{ refreshing ? 100 : controlsPullProgress }}%"></div>
+            </div>
+          </div>
+          <text class="{{ watchControlsUi.empty + themeMuted + themeControl }}" if="{{ compatibilityNotice }}">{{ compatibilityNotice }}</text>
+          <div class="{{ watchControlsUi.grid }}" if="{{ !compatibilityNotice }}" style="transform: {{ controlsPullTransform }}">
+            <div class="{{ watchControlsUi.controlRow }}" for="{{ displayRows }}" tid="id">
+              <div class="{{ $item.first.watchCellStyle + themeTileClass + $item.first.watchCellStateStyle }}" @click="select($item.first.id)">
+                <div class="{{ $item.first.watchOrbStyle + ' ' + $item.first.watchOrbSizeStyle + $item.first.watchOrbDayStyle }}">
+                  <image class="{{ $item.first.watchOrbIconStyle }}" src="{{ $item.first.icon }}" @error="onControlIconError($item.first.id)"></image>
+                </div>
+                <div class="{{ $item.first.watchCellCopyStyle }}">
+                  <text class="{{ $item.first.watchCellLabelStyle + $item.first.labelToneStyle }}">{{ $item.first.displayLabel }}</text>
+                  <text if="{{ $item.first.displayHint }}" class="{{ 'watch-cell-hint' + themeMuted }}">{{ $item.first.displayHint }}</text>
+                </div>
+              </div>
+            </div>
+            <text class="{{ watchControlsUi.empty + themeMuted + themeControl }}" if="{{ displayRows.length === 0 }}">{{ emptyLabel }}</text>
+          </div>
+        </div>
+      </swiper>
+      <div class="{{ watchControlsUi.pager }}">
+        <div class="{{ watchPage === 0 ? 'watch-pager-dot watch-pager-active' + (themeDay ? ' watch-pager-active-day' : '') : 'watch-pager-dot' + (themeDay ? ' watch-pager-dot-day' : '') }}" @click="setWatchPage(0)"></div>
+        <div class="{{ watchPage === 1 ? 'watch-pager-dot watch-pager-active' + (themeDay ? ' watch-pager-active-day' : '') : 'watch-pager-dot' + (themeDay ? ' watch-pager-dot-day' : '') }}" @click="setWatchPage(1)"></div>
+      </div>
+    </stack>
+    <div class="confirm-overlay" if="{{ confirmTitle }}" @touchstart="clearControlsPull">
+      <div class="{{ ui.confirmation + (themeDay ? ' theme-confirmation-day' : '') }}">
+        <div class="{{ ui.confirmAction }}">
+          <image class="{{ ui.confirmIcon }}" src="{{ themeConfirmIcon }}"></image>
+          <text class="{{ ui.confirmTitle + themeInk }}">{{ confirmTitle }}</text>
+        </div>
+        <div class="{{ ui.confirmActions }}">
+          <text class="{{ ui.confirmButton }}" @click="execute">确认</text>
+          <text class="{{ ui.cancelButton + themeInk + themeControl }}" @click="cancel">取消</text>
+        </div>
+      </div>
+    </div>
+    <div class="{{ ui.toast + themeControl }}" if="{{ toastText && !confirmTitle }}">
+      <text class="{{ ui.toastText + themeInk }}">{{ toastText }}</text>
+    </div>
+  </stack>
+</template>
+
+<script>
+import { createGaragePage } from '../../common/garage-page.js'
+
+export default createGaragePage({ lite: true })
+</script>
+
+<style>
+.page {
+  width: 100%;
+  height: 100%;
+  background-color: #10161b;
+}
+.home-layout-pending,
+.confirm-overlay {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.home-layout-pending-text {
+  color: #ebf2fc;
+  font-size: 20px;
+  text-align: center;
+}
+.confirm-overlay {
+  background-color: rgba(7, 13, 25, 0.38);
+}
+.scroll-page {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+}
+.home-screen {
+  width: 336px;
+  padding: 22px 18px 14px;
+  flex-direction: column;
+}
+.vehicle-meta {
+  width: 300px;
+  height: 48px;
+  margin-top: 8px;
+  border-radius: 14px;
+  background-color: #213239;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+}
+.refresh {
+  width: 174px;
+  height: 48px;
+  flex-direction: row;
+  align-items: center;
+}
+.refresh-icon {
+  width: 18px;
+  height: 18px;
+  margin-left: 10px;
+  margin-right: 6px;
+  object-fit: contain;
+}
+.meta-divider {
+  width: 1px;
+  height: 24px;
+  background-color: #41565d;
+}
+.connection {
+  width: 124px;
+  height: 48px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+.connection-status {
+  width: 108px;
+  margin-left: 0;
+  justify-content: center;
+  flex-direction: row;
+  align-items: center;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  margin-right: 5px;
+  border-radius: 3px;
+  background-color: #78868c;
+}
+.online {
+  background-color: #9ee9ce;
+}
+.mode {
+  width: 71px;
+  color: #c5d5d4;
+  font-size: 15px;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.settings-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  object-fit: contain;
+}
+.range {
+  width: 300px;
+  height: 187px;
+  padding: 10px 12px 7px;
+  border-radius: 22px;
+  background-color: #18262c;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+.range-header {
+  width: 276px;
+  height: 36px;
+  padding: 0 2px;
+  align-items: center;
+  justify-content: space-between;
+}
+.model {
+  color: #e1edec;
+  font-size: 26px;
+  font-weight: bold;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.motion {
+  color: #cbdad8;
+  font-size: 18px;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.vehicle-image {
+  width: 244px;
+  height: 79px;
+  object-fit: contain;
+}
+.split {
+  width: 276px;
+  height: 52px;
+  justify-content: space-between;
+}
+.energy {
+  width: 134px;
+  height: 52px;
+  padding: 5px 9px 8px;
+  border-radius: 11px;
+  background-color: #203139;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.total-energy {
+  width: 276px;
+  padding: 0 9px;
+  align-items: center;
+  justify-content: center;
+}
+.energy-reading {
+  height: 31px;
+  align-items: center;
+}
+.energy-icon {
+  width: 23px;
+  height: 23px;
+  margin-right: 6px;
+  object-fit: contain;
+}
+.distance {
+  color: #f4faf8;
+  font-size: 27px;
+  font-weight: bold;
+  lines: 1;
+}
+.compact {
+  font-size: 20px;
+}
+.total-label {
+  color: #cbdad8;
+  font-size: 18px;
+  font-weight: normal;
+}
+.unit {
+  color: #bacbd0;
+  font-size: 15px;
+  font-weight: normal;
+}
+.energy-track {
+  width: 116px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: #4a585f;
+}
+.energy-fill {
+  height: 5px;
+  border-radius: 3px;
+}
+.electric-fill {
+  background-color: #6fe7a5;
+}
+.fuel-fill {
+  background-color: #74b7ff;
+}
+.range-indicators {
+  width: 24px;
+  height: 4px;
+  justify-content: space-between;
+}
+.range-dot {
+  width: 6px;
+  height: 4px;
+  border-radius: 2px;
+  background-color: #53686b;
+}
+.active-range-dot {
+  width: 12px;
+  background-color: #9ee9ce;
+}
+.updated {
+  width: 134px;
+  color: #d4e4e2;
+  font-size: 15px;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.grid {
+  width: 300px;
+  flex-direction: column;
+}
+.control-row {
+  width: 300px;
+  margin-top: 10px;
+  justify-content: space-between;
+}
+.tile {
+  width: 146px;
+  height: 97px;
+  padding: 4px 9px;
+  border-radius: 18px;
+  border-width: 0px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.full-tile {
+  width: 300px;
+  justify-content: center;
+}
+.ready {
+  background-color: #1d3532;
+}
+.paused {
+  background-color: #202c33;
+}
+.unassigned {
+  background-color: #19252c;
+}
+.tile-symbol {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 3px;
+  border-radius: 12px;
+  background-color: rgba(0, 0, 0, 0);
+  align-items: center;
+  justify-content: center;
+}
+.symbol-ready {
+  background-color: rgba(0, 0, 0, 0);
+}
+.tile-icon {
+  width: 27px;
+  height: 27px;
+  object-fit: contain;
+}
+.muted-icon {
+  opacity: 0.68;
+}
+.tile-copy {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.tile-label {
+  color: #f4faf8;
+  font-size: 22px;
+  font-weight: bold;
+  text-align: center;
+  lines: 1;
+}
+.tile-hint {
+  color: #aabac0;
+  font-size: 16px;
+}
+.tile-rect {
+  width: 284px;
+  height: 56px;
+  margin-left: 8px;
+  padding: 0 12px;
+  border-radius: 14px;
+  flex-direction: row;
+  justify-content: center;
+}
+.tile-symbol-rect {
+  margin-right: 10px;
+  margin-bottom: 0;
+}
+.tile-icon-rect {
+  width: 32px;
+  height: 32px;
+}
+.tile-copy-rect {
+  width: 94px;
+}
+.empty {
+  width: 300px;
+  height: 92px;
+  margin-top: 10px;
+  border-radius: 16px;
+  color: #a9bcbf;
+  background-color: #162026;
+  font-size: 22px;
+  text-align: center;
+}
+.toast {
+  width: 280px;
+  height: 80px;
+  left: 28px;
+  top: 108px;
+  padding: 5px 12px;
+  border-radius: 15px;
+  background-color: #30434a;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+.toast-text {
+  color: #f4faf8;
+  width: 256px;
+  font-size: 19px;
+  line-height: 23px;
+  lines: 3;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+.confirmation {
+  width: 288px;
+  padding: 16px;
+  border-radius: 24px;
+  background-color: #293d56;
+  flex-direction: column;
+  align-items: center;
+}
+.confirm-action {
+  width: 100%;
+  min-height: 52px;
+  align-items: center;
+  justify-content: center;
+}
+.confirm-icon {
+  width: 34px;
+  height: 34px;
+  margin-right: 10px;
+  object-fit: contain;
+}
+.confirm-title {
+  max-width: 76%;
+  color: #f4faf8;
+  font-size: 22px;
+  font-weight: bold;
+  text-align: center;
+  lines: 2;
+  text-overflow: ellipsis;
+}
+.confirm-actions {
+  width: 100%;
+  margin-top: 16px;
+  flex-direction: column;
+}
+.confirm-button, .cancel-button {
+  width: 100%;
+  height: 64px;
+  border-radius: 18px;
+  font-size: 23px;
+  text-align: center;
+}
+.confirm-button {
+  color: #142439;
+  background-color: #c9ddf4;
+  font-weight: bold;
+}
+.cancel-button {
+  margin-top: 16px;
+  color: #e7f3f2;
+  background-color: #394f69;
+}
+
+/* Xiaomi Smart Band 10 (212x520 capsule display, inverse scale ~1.585x under designWidth 336) */
+.home-screen-capsule {
+  width: 336px;
+  padding: 44px 19px 56px;
+  align-items: center;
+}
+.range-capsule {
+  width: 298px;
+  height: 312px;
+  padding: 16px 16px 12px;
+  border-radius: 30px;
+}
+.range-header-capsule {
+  width: 266px;
+  height: 36px;
+  padding: 0 2px;
+}
+.model-capsule {
+  font-size: 27px;
+}
+.motion-capsule {
+  font-size: 24px;
+}
+.vehicle-image-capsule {
+  width: 266px;
+  height: 86px;
+}
+.split-capsule {
+  width: 266px;
+  height: 136px;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.energy-capsule {
+  width: 266px;
+  height: 64px;
+  padding: 8px 14px 10px;
+  border-radius: 16px;
+}
+.total-energy-capsule {
+  width: 266px;
+  height: 88px;
+  padding: 0 12px;
+}
+.energy-reading-capsule {
+  height: 38px;
+}
+.energy-icon-capsule {
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+}
+.distance-capsule {
+  font-size: 34px;
+}
+.compact-capsule {
+  font-size: 28px;
+}
+.total-label-capsule {
+  font-size: 24px;
+}
+.unit-capsule {
+  font-size: 22px;
+}
+.energy-track-capsule {
+  width: 238px;
+  height: 8px;
+  border-radius: 4px;
+}
+.energy-fill-capsule {
+  height: 8px;
+  border-radius: 4px;
+}
+.range-indicators-capsule {
+  width: 36px;
+  height: 6px;
+}
+.range-dot-capsule {
+  width: 9px;
+  height: 6px;
+  border-radius: 3px;
+}
+.active-range-dot-capsule {
+  width: 18px;
+}
+.vehicle-meta-capsule {
+  width: 298px;
+  height: 112px;
+  margin-top: 12px;
+  padding: 8px 14px;
+  border-radius: 20px;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: space-between;
+}
+.refresh-capsule {
+  width: 270px;
+  height: 44px;
+  padding: 0;
+}
+.refresh-icon-capsule {
+  width: 32px;
+  height: 32px;
+  margin-left: 0;
+  margin-right: 10px;
+}
+.updated-capsule {
+  width: 228px;
+  font-size: 26px;
+}
+.meta-divider-capsule {
+  width: 270px;
+  height: 1px;
+}
+.connection-capsule {
+  width: 270px;
+  height: 44px;
+}
+.connection-status-capsule {
+  width: 270px;
+  justify-content: flex-start;
+  margin-left: 0;
+}
+.dot-capsule {
+  width: 11px;
+  height: 11px;
+  margin-right: 9px;
+  border-radius: 6px;
+}
+.mode-capsule {
+  width: 206px;
+  font-size: 25px;
+}
+.settings-icon-capsule {
+  width: 34px;
+  height: 34px;
+  margin-right: 0;
+}
+.grid-capsule {
+  width: 298px;
+}
+.control-row-capsule {
+  width: 298px;
+  margin-top: 14px;
+}
+.tile-capsule {
+  width: 298px;
+  height: 114px;
+  padding: 0 18px;
+  border-radius: 24px;
+  flex-direction: row;
+  justify-content: center;
+}
+.tile-symbol-capsule {
+  width: 56px;
+  height: 56px;
+  margin-right: 14px;
+  margin-bottom: 0;
+  border-radius: 16px;
+}
+.tile-icon-capsule {
+  width: 44px;
+  height: 44px;
+}
+.tile-copy-capsule {
+  width: 128px;
+}
+.tile-label-capsule {
+  font-size: 30px;
+}
+.tile-hint-capsule {
+  font-size: 22px;
+}
+.empty-capsule {
+  width: 298px;
+  height: 124px;
+  margin-top: 14px;
+  border-radius: 22px;
+  font-size: 28px;
+}
+.toast-capsule {
+  width: 304px;
+  height: 132px;
+  left: 16px;
+  top: 210px;
+  padding: 10px 16px;
+  border-radius: 22px;
+}
+.toast-text-capsule {
+  width: 272px;
+  font-size: 27px;
+  line-height: 33px;
+}
+.confirmation-capsule {
+  width: 298px;
+}
+.confirm-action-capsule {
+  min-height: 88px;
+}
+.confirm-icon-capsule {
+  width: 42px;
+  height: 42px;
+  margin-right: 12px;
+}
+.confirm-title-capsule {
+  font-size: 30px;
+}
+.confirm-actions-capsule {
+  margin-top: 14px;
+  flex-direction: row;
+  justify-content: space-between;
+}
+.confirm-button-capsule, .cancel-button-capsule {
+  width: 48%;
+  height: 76px;
+  border-radius: 20px;
+  font-size: 25px;
+}
+.cancel-button-capsule {
+  margin-top: 0;
+}
+.watch-shell {
+  width: 100%;
+  height: 100%;
+}
+.watch-shell-classic {
+  background-color: #000000;
+}
+.watch-swiper {
+  width: 100%;
+  height: 100%;
+}
+.watch-page {
+  width: 100%;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+}
+.watch-mileage-page {
+  padding: 16px 14px 8px;
+  justify-content: flex-start;
+}
+.watch-mileage-page-classic {
+  background-color: #000000;
+}
+.watch-mileage-page-compact {
+  padding: 13px 12px 6px;
+}
+.watch-mileage-page-large {
+  padding: 19px 14px 10px;
+}
+.watch-hero-header {
+  width: 288px;
+  flex-direction: column;
+  align-items: center;
+}
+.watch-hero-header-compact {
+  width: 278px;
+}
+.watch-hero-header-large {
+  width: 294px;
+}
+.watch-model {
+  width: 100%;
+  height: 26px;
+  max-width: 196px;
+  color: #eef4ff;
+  font-size: 20px;
+  font-weight: bold;
+  text-align: center;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.watch-model-compact {
+  max-width: 188px;
+  font-size: 20px;
+}
+.watch-model-large {
+  max-width: 204px;
+  font-size: 20px;
+}
+.watch-hero-num-row {
+  flex-direction: row;
+  align-items: flex-end;
+  justify-content: center;
+}
+.watch-hero {
+  color: #f6f9ff;
+  font-size: 46px;
+  font-weight: bold;
+  lines: 1;
+}
+.watch-hero-compact {
+  font-size: 46px;
+}
+.watch-hero-large {
+  font-size: 46px;
+}
+.watch-hero-unit, .watch-hero-unit-ghost {
+  width: 44px;
+  color: #c8d7eb;
+  font-size: 17px;
+  font-weight: normal;
+  padding-bottom: 7px;
+  lines: 1;
+}
+.watch-hero-unit-ghost {
+  opacity: 0;
+}
+.watch-energy-summary {
+  width: 100%;
+  height: 37px;
+  margin-top: 4px;
+  align-items: center;
+  justify-content: center;
+}
+.watch-energy-item {
+  width: 96px;
+  margin: 0 6px;
+  flex-direction: column;
+}
+.watch-energy-reading {
+  height: 25px;
+  align-items: center;
+}
+.watch-energy-icon {
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  object-fit: contain;
+}
+.watch-energy-value {
+  max-width: 70px;
+  color: #ffffff;
+  font-size: 17px;
+  font-weight: bold;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.watch-energy-track {
+  width: 100%;
+  height: 5px;
+  margin-top: 3px;
+  border-radius: 2px;
+  background-color: rgba(211, 222, 235, 0.44);
+}
+.watch-energy-fill {
+  height: 5px;
+  border-radius: 2px;
+}
+.watch-connection-row {
+  width: 100%;
+  height: 24px;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6px;
+}
+.watch-connection-row-circle {
+  justify-content: center;
+  padding-right: 0px;
+}
+.watch-connection-row-rect {
+  height: 44px;
+  margin-bottom: 4px;
+  padding-right: 0px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+}
+.watch-model-top-left {
+  flex: 1;
+  height: 40px;
+  margin-right: 10px;
+  color: #eef4ff;
+  font-size: 32px;
+  font-weight: bold;
+  text-align: left;
+  lines: 1;
+  text-overflow: ellipsis;
+}
+.watch-connection {
+  height: 24px;
+  align-items: center;
+}
+.watch-connection-text {
+  max-width: 88px;
+}
+.watch-connection-text, .watch-motion {
+  color: #f4f8ff;
+  font-size: 16px;
+  lines: 1;
+  letter-spacing: 0.5px;
+  text-overflow: ellipsis;
+}
+.watch-refresh-icon {
+  width: 13px;
+  height: 13px;
+  margin-left: 5px;
+  object-fit: contain;
+}
+.watch-car {
+  width: 308px;
+  height: 125px;
+  margin-top: 8px;
+  object-fit: contain;
+}
+.watch-car-compact {
+  width: 296px;
+  height: 118px;
+}
+.watch-car-large {
+  width: 312px;
+  height: 126px;
+}
+.watch-controls-page {
+  padding: 16px 36px 16px;
+  justify-content: space-between;
+}
+.watch-controls-page-classic {
+  background-color: #0a101b;
+}
+.watch-top-pill {
+  height: 26px;
+  padding: 0 12px;
+  align-items: center;
+  justify-content: center;
+}
+.watch-top-text {
+  color: #d6e3f5;
+  font-size: 13px;
+  margin-left: 5px;
+  lines: 1;
+}
+.watch-pull-progress {
+  position: absolute;
+  width: 72px;
+  height: 3px;
+  left: 24px;
+  bottom: 0;
+  border-radius: 2px;
+  background-color: rgba(219, 232, 247, 0.35);
+}
+.watch-pull-fill {
+  height: 3px;
+  border-radius: 2px;
+  background-color: #d8ebff;
+}
+.watch-grid {
+  width: 248px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.watch-control-row {
+  width: 248px;
+  margin-top: 8px;
+  justify-content: space-around;
+}
+.watch-cell {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  border-width: 0px;
+  padding: 2px 4px;
+  background-color: #182536;
+}
+.watch-control-copy {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.watch-orb {
+  border-width: 0px;
+  background-color: rgba(0, 0, 0, 0);
+  align-items: center;
+  justify-content: center;
+}
+.watch-orb-paused,
+.watch-orb-ready,
+.watch-orb-active,
+.watch-orb-paused-day,
+.watch-orb-ready-day,
+.watch-orb-active-day {
+  border-width: 0px;
+  background-color: rgba(0, 0, 0, 0);
+}
+.watch-orb-icon {
+  object-fit: contain;
+}
+.watch-cell-label {
+  margin-top: 2px;
+  color: #f4f8ff;
+  font-weight: bold;
+  text-align: center;
+  lines: 1;
+}
+.watch-cell-label-loading {
+  color: #8ca1bc;
+  font-weight: normal;
+}
+.watch-cell-label-loading-day {
+  color: #415b6c;
+  font-weight: normal;
+}
+.watch-cell-hint {
+  color: #8ca1bc;
+  font-size: 11px;
+  line-height: 12px;
+  margin-top: 1px;
+  text-align: center;
+  lines: 1;
+}
+.watch-empty {
+  width: 236px;
+  padding: 14px 10px;
+  border-radius: 14px;
+  background-color: #141f30;
+  color: #a9bcbf;
+  font-size: 15px;
+  text-align: center;
+}
+.watch-pager {
+  width: 10px;
+  height: 28px;
+  right: 11px;
+  top: 154px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+}
+.watch-pager-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 3px;
+  background-color: #4f636e;
+}
+.watch-pager-active {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: #9ee9ce;
+}
+.watch-home-footer {
+  position: absolute;
+  left: 0px;
+  bottom: 9px;
+  width: 336px;
+  flex-direction: column;
+  align-items: center;
+}
+.watch-motion-group {
+  width: 176px;
+  height: 24px;
+  margin-bottom: 6px;
+  align-items: center;
+  justify-content: center;
+}
+.watch-motion-icon {
+  width: 17px;
+  height: 17px;
+  margin-right: 5px;
+  object-fit: contain;
+}
+.watch-motion {
+  max-width: 150px;
+  text-align: center;
+}
+.watch-next-page {
+  width: 48px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+}
+.watch-next-icon {
+  width: 18px;
+  height: 11px;
+  object-fit: contain;
+}
+
+/* Rectangular Band Pro 2-page mode (336x480 tall viewport) */
+.watch-mileage-page-tall {
+  padding: 16px 18px 14px;
+}
+.watch-hero-header-tall {
+  width: 300px;
+}
+.watch-model-tall {
+  height: 36px;
+  max-width: 300px;
+  font-size: 27px;
+}
+.watch-hero-tall {
+  font-size: 54px;
+}
+.watch-hero-unit-tall, .watch-hero-unit-ghost-tall {
+  font-size: 19px;
+  padding-bottom: 9px;
+}
+.watch-refresh-icon-tall {
+  width: 14px;
+  height: 14px;
+}
+.watch-car-tall {
+  width: 300px;
+  height: 186px;
+  margin-top: 20px;
+}
+.watch-car-short {
+  height: 138px;
+  margin-top: 12px;
+}
+.watch-controls-page-tall {
+  padding: 14px 18px 14px;
+  justify-content: flex-start;
+}
+.watch-top-pill-tall {
+  height: 32px;
+  padding: 0 14px;
+}
+.watch-top-text-tall {
+  font-size: 15px;
+  margin-left: 6px;
+}
+.watch-empty-tall {
+  width: 280px;
+  padding: 18px 12px;
+  border-radius: 16px;
+  font-size: 17px;
+}
+.watch-grid-tall {
+  width: 300px;
+  margin-top: 14px;
+}
+.watch-control-row-tall {
+  width: 300px;
+  margin-top: 8px;
+}
+.watch-cell-single {
+  width: 300px;
+  height: 72px;
+  padding: 0 12px;
+  flex-direction: row;
+  justify-content: center;
+  background-color: #19263a;
+}
+.watch-cell-rect {
+  width: 296px;
+  height: 76px;
+}
+.watch-cell-rect-short {
+  height: 64px;
+}
+.watch-orb-single {
+  width: 42px;
+  height: 42px;
+  margin-right: 8px;
+  border-radius: 12px;
+}
+.watch-orb-icon-single {
+  width: 33px;
+  height: 33px;
+}
+.watch-control-copy-single {
+  width: 94px;
+}
+.watch-cell-label-single {
+  margin-top: 0;
+  font-size: 20px;
+}
+.watch-pager-tall {
+  right: 8px;
+  top: 226px;
+}
+.theme-panel-day {
+  background-color: rgba(243, 248, 252, 0.93);
+  border-color: #a7becc;
+}
+.theme-panel-night {
+  background-color: rgba(20, 34, 53, 0.91);
+  border-color: #405976;
+}
+.theme-confirmation-day {
+  background-color: #f4f8fc;
+}
+.theme-tile-day, .theme-tile-night, .theme-tile-icon {
+  border-width: 0px;
+}
+.theme-tile-day {
+  background-color: rgba(247, 251, 254, 0.94);
+}
+.theme-tile-night {
+  background-color: rgba(29, 44, 67, 0.68);
+}
+.theme-tile-icon {
+  background-color: rgba(0, 0, 0, 0);
+}
+.watch-cell-paused {
+  border-width: 0px;
+  background-color: rgba(18, 28, 42, 0.56);
+}
+.watch-cell-ready {
+  border-width: 0px;
+  background-color: rgba(29, 44, 67, 0.72);
+}
+.watch-cell-active {
+  border-width: 0px;
+  background-color: rgba(24, 98, 232, 0.62);
+}
+.watch-cell-paused-day {
+  border-width: 0px;
+  background-color: #d6e4ee;
+}
+.watch-cell-ready-day {
+  border-width: 0px;
+  background-color: rgba(247, 251, 254, 0.94);
+}
+.watch-cell-active-day {
+  border-width: 0px;
+  background-color: rgba(142, 197, 255, 0.88);
+}
+.tile-paused {
+  border-width: 0px;
+  background-color: rgba(20, 30, 42, 0.55);
+}
+.tile-active {
+  border-width: 0px;
+  background-color: rgba(24, 98, 232, 0.58);
+}
+.tile-paused-day {
+  border-width: 0px;
+  background-color: #d6e4ee;
+}
+.tile-active-day {
+  border-width: 0px;
+  background-color: rgba(142, 197, 255, 0.86);
+}
+.range-summary {
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+}
+.range-total {
+  font-size: 46px;
+  text-align: center;
+}
+.range-breakdown {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+}
+.range-breakdown-summary {
+  width: 100%;
+  margin-bottom: 3px;
+}
+.range-breakdown-reading {
+  margin: 0 7px;
+  align-items: center;
+}
+.range-breakdown-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 4px;
+  object-fit: contain;
+}
+.range-breakdown-icon-narrow {
+  width: 25px;
+  height: 25px;
+}
+.range-breakdown-value {
+  color: #cbdad8;
+  font-size: 17px;
+  lines: 1;
+}
+.range-breakdown-value-narrow {
+  font-size: 22px;
+}
+.theme-ink-day {
+  color: #152c3c;
+}
+.theme-muted-day {
+  color: #415b6c;
+}
+.theme-control-day {
+  background-color: #dbe8f0;
+  border-color: #a7becc;
+  color: #152c3c;
+  selected-color: #126052;
+}
+.theme-stage-day {
+  background-color: #e7eff4;
+}
+.theme-stage-night {
+  background-color: #0d1626;
+}
+.online-day {
+  background-color: #126052;
+}
+.watch-energy-track-day {
+  background-color: rgba(21, 44, 60, 0.2);
+}
+.watch-pull-progress-day {
+  background-color: rgba(21, 44, 60, 0.22);
+}
+.watch-pull-fill-day {
+  background-color: #126052;
+}
+.watch-pager-dot-day {
+  background-color: #9cb0be;
+}
+.watch-pager-active-day {
+  background-color: #126052;
+}
+</style>

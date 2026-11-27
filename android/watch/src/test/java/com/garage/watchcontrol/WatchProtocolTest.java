@@ -44,6 +44,9 @@ public final class WatchProtocolTest {
         assertEquals(1, WatchProtocol.controlColumns(false, 336, 396));
         assertEquals(1, WatchProtocol.controlColumns(false, 336, 480));
         assertEquals(1, WatchProtocol.controlColumns(false, 192, 490));
+        assertEquals(3, WatchProtocol.controlRowColumns(2, 3));
+        assertEquals(2, WatchProtocol.controlRowColumns(2, 4));
+        assertEquals(1, WatchProtocol.controlRowColumns(1, 3));
     }
     @org.junit.Test public void lynkVoiceFiltersBrandAndUnverifiedActions() {
         org.junit.Assert.assertEquals("lynk_unlock", WatchProtocol.voiceAction("LYNKCO", "lynk_unlock"));
@@ -159,6 +162,9 @@ public final class WatchProtocolTest {
         WatchProtocol.EnergyBreakdown unknown = WatchProtocol.energyBreakdown(null);
         assertTrue(unknown.showElectric());
         assertTrue(unknown.showFuel());
+        assertEquals("", WatchProtocol.singleScreenRangeSummary(null));
+        assertEquals("643 km · 电 97% · 油 517 km", WatchProtocol.singleScreenRangeSummary(hybrid));
+        assertEquals("84% · 电 84%", WatchProtocol.singleScreenRangeSummary(ev));
     }
 
     @Test public void adaptsRoundWatchHomeMetricsByDialSizeAndPreservesRectDefault() {
@@ -183,14 +189,23 @@ public final class WatchProtocolTest {
         for (int diameterPx : new int[]{396, 454, 466, 480}) {
             WatchProtocol.WatchScale scale = new WatchProtocol.WatchScale(true, diameterPx, 2.0f);
             assertEquals(diameterPx, scale.px(336, 233));
-            assertEquals(Math.round(diameterPx * (72 / 336.0f)), scale.px(scale.roundOrb336(4), 58));
-            assertEquals(Math.round(diameterPx * (48 / 336.0f)), scale.px(scale.roundIcon336(4), 40));
-            assertEquals(diameterPx * (16 / 336.0f), scale.textPx(scale.roundLabel336(4)), 0.05f);
+            assertEquals(Math.round(diameterPx * (38 / 336.0f)), scale.px(scale.roundOrb336(3), 36));
+            assertEquals(Math.round(diameterPx * (30 / 336.0f)), scale.px(scale.roundIcon336(3), 26));
+            assertEquals(diameterPx * (13 / 336.0f), scale.textPx(scale.roundLabel336(3)), 0.05f);
+            assertEquals(Math.round(diameterPx * (42 / 336.0f)), scale.px(scale.roundOrb336(4), 38));
+            assertEquals(Math.round(diameterPx * (34 / 336.0f)), scale.px(scale.roundIcon336(4), 28));
+            assertEquals(diameterPx * (14 / 336.0f), scale.textPx(scale.roundLabel336(4)), 0.05f);
             assertTrue(WatchProtocol.WatchScale.roundControlsEstimatedHeight336(1, true) <= 336);
             assertTrue(WatchProtocol.WatchScale.roundControlsEstimatedHeight336(2, true) <= 336);
+            assertTrue(WatchProtocol.WatchScale.roundControlsEstimatedHeight336(3, true) <= 336);
             assertTrue(WatchProtocol.WatchScale.roundControlsEstimatedHeight336(4, true) <= 336);
         }
         WatchProtocol.WatchScale rect = new WatchProtocol.WatchScale(false, 400, 2.0f);
         assertEquals(28, rect.px(36, 14));
+        assertTrue(WatchProtocol.shouldInterceptBack(true, false, false, 0));
+        assertTrue(WatchProtocol.shouldInterceptBack(false, true, false, 0));
+        assertTrue(WatchProtocol.shouldInterceptBack(false, false, true, 1));
+        assertFalse(WatchProtocol.shouldInterceptBack(false, false, true, 0));
+        assertFalse(WatchProtocol.shouldInterceptBack(false, false, false, 1));
     }
 }

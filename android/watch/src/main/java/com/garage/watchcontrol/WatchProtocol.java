@@ -54,6 +54,10 @@ final class WatchProtocol {
         return round || Math.abs(width - height) <= Math.max(2, shortSide / 50) ? 2 : 1;
     }
 
+    static int controlRowColumns(int columns, int actionCount) {
+        return columns == 2 && actionCount == 3 ? 3 : columns;
+    }
+
     record WatchScale(boolean roundScreen, int diameterPx, float density) {
         static final float DESIGN_WIDTH = 336.0f;
 
@@ -69,25 +73,25 @@ final class WatchProtocol {
         }
 
         int roundOrb336(int actionCount) {
-            return actionCount <= 1 ? 110 : actionCount == 2 ? 92 : 72;
+            return actionCount <= 1 ? 64 : actionCount == 2 ? 52 : actionCount == 3 ? 38 : 42;
         }
 
         int roundIcon336(int actionCount) {
-            return actionCount <= 1 ? 74 : actionCount == 2 ? 62 : 48;
+            return actionCount <= 1 ? 52 : actionCount == 2 ? 42 : actionCount == 3 ? 30 : 34;
         }
 
         int roundLabel336(int actionCount) {
-            return actionCount <= 1 ? 20 : actionCount == 2 ? 18 : 16;
+            return actionCount <= 1 ? 18 : actionCount == 2 ? 16 : actionCount == 3 ? 13 : 14;
         }
 
         static int roundControlsEstimatedHeight336(int actionCount, boolean withHint) {
-            int orb = actionCount <= 1 ? 110 : actionCount == 2 ? 92 : 72;
-            int labelLine = actionCount <= 1 ? 24 : actionCount == 2 ? 22 : 19;
-            int rowHeight = orb + 4 + labelLine + (withHint ? 15 : 0);
-            int rows = actionCount <= 2 ? 1 : 2;
+            int orb = actionCount <= 1 ? 56 : actionCount == 2 ? 46 : actionCount == 3 ? 34 : 38;
+            int labelLine = actionCount <= 1 ? 21 : actionCount == 2 ? 19 : actionCount == 3 ? 16 : 17;
+            int rowHeight = orb + 10 + labelLine + (withHint ? 14 : 0);
+            int rows = actionCount <= 3 ? 1 : 2;
             int gridHeight = rows * rowHeight + (rows > 1 ? 8 : 0);
-            // top/bottom padding (15 + 15) + topPill (~26) + settingsPill (~30) + margins (~8)
-            return 94 + gridHeight;
+            // top/bottom padding (14 + 14) + topPill (~26) + settingsPill (~36) + margins (~8)
+            return 90 + gridHeight;
         }
     }
 
@@ -372,5 +376,34 @@ final class WatchProtocol {
 
     static String heroUnit(String heroDisplay) {
         return heroDisplay != null && heroDisplay.endsWith(" km") ? " km" : "";
+    }
+
+    static String singleScreenRangeSummary(JSONObject vehicle) {
+        if (vehicle == null) return "";
+        String hero = heroDisplay(vehicle);
+        String electricKm = rangeText(vehicle, "electricKm");
+        int electricPct = validPercent(vehicle, "electricPercent");
+        String fuelKm = rangeText(vehicle, "fuelKm");
+        int fuelPct = validPercent(vehicle, "fuelPercent");
+        String electricPart = !"—".equals(electricKm) ? "电 " + electricKm + " km"
+                : electricPct >= 0 ? "电 " + electricPct + "%" : "";
+        String fuelPart = !"—".equals(fuelKm) ? "油 " + fuelKm + " km"
+                : fuelPct >= 0 ? "油 " + fuelPct + "%" : "";
+        if ("— km".equals(hero) && electricPart.isEmpty() && fuelPart.isEmpty()) return "";
+        StringBuilder sb = new StringBuilder();
+        if (!"— km".equals(hero)) sb.append(hero);
+        if (!electricPart.isEmpty()) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(electricPart);
+        }
+        if (!fuelPart.isEmpty()) {
+            if (sb.length() > 0) sb.append(" · ");
+            sb.append(fuelPart);
+        }
+        return sb.toString();
+    }
+
+    static boolean shouldInterceptBack(boolean hasConfirm, boolean settingsOpen, boolean twoPageShell, int currentPage) {
+        return hasConfirm || settingsOpen || (twoPageShell && currentPage > 0);
     }
 }

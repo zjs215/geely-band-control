@@ -205,7 +205,7 @@ test('cached and offline replies clear directional labels and availability', () 
   link.reply({ ...controls, vehicleCached: true })
   assert.equal(link.page.displayRows[0].first.label, '窗全开')
   assert.equal(link.page.displayRows[0].second.label, '空调')
-  assert.equal(link.page.displayRows[1].first.label, '车锁')
+  assert.equal(link.page.displayRows[0].third.label, '车锁')
   assert.match(link.page.displayRows[0].first.style, /paused/)
   assert.deepEqual(Array.from(link.page.available), [])
   link.page.syncStatus()
@@ -1380,7 +1380,7 @@ test('watch controls keep distinct background and orb states across night and da
   circle.page.updateRows()
   assert.equal(circle.page.displayRows[0].first.watchCellStateStyle, ' watch-cell-active')
   assert.equal(circle.page.displayRows[0].second.watchCellStateStyle, ' watch-cell-ready')
-  assert.equal(circle.page.displayRows[1].first.watchCellStateStyle, ' watch-cell-paused')
+  assert.equal(circle.page.displayRows[0].third.watchCellStateStyle, ' watch-cell-paused')
   assert.equal(circle.page.displayRows[0].first.watchOrbDayStyle, '')
 
   circle.page.themeArt = '/common/themes/alpine-circle-day.jpg'
@@ -1388,7 +1388,7 @@ test('watch controls keep distinct background and orb states across night and da
   circle.page.updateRows()
   assert.equal(circle.page.displayRows[0].first.watchCellStateStyle, ' watch-cell-active-day')
   assert.equal(circle.page.displayRows[0].second.watchCellStateStyle, ' watch-cell-ready-day')
-  assert.equal(circle.page.displayRows[1].first.watchCellStateStyle, ' watch-cell-paused-day')
+  assert.equal(circle.page.displayRows[0].third.watchCellStateStyle, ' watch-cell-paused-day')
   assert.equal(circle.page.displayRows[0].first.watchOrbDayStyle, ' watch-orb-active-day')
   assert.equal(circle.page.displayRows[0].second.watchOrbDayStyle, ' watch-orb-ready-day')
 
@@ -1541,4 +1541,69 @@ test('unready openTimer fallback hello failure does not mark handshake complete 
   })
   assert.equal(sent.at(-1).data.type, 'status')
   assert.equal(link.page.toastText, '')
+})
+
+test('circular screen supports trio 3-button row, 2x2 quad, and optional single-screen mode defaulting to 2-page', () => {
+  const storage = new Map()
+  const native = {
+    '@app-module/system.device': {
+      getInfo({ success }) { success({ screenWidth: 466, screenHeight: 466, screenShape: 'circle' }) }
+    },
+    '@app-module/system.storage': {
+      get({ key, success }) { success(storage.get(key) || '') },
+      set({ key, value, complete }) { storage.set(key, value); if (complete) complete() }
+    }
+  }
+  const circle = start({ native })
+  assert.equal(circle.page.layoutProfile, 'circle')
+  assert.equal(circle.page.canChangeDisplay, true)
+  assert.equal(circle.page.circleTwoPage, true)
+  assert.equal(circle.page.twoPageChecked, true)
+  assert.equal(circle.page.useTwoPageShell, true)
+
+  circle.hello({ bandDisplay: { twoPage: false, revision: 3 } })
+  circle.reply({
+    brand: 'LYNKCO',
+    mapped: ['lynk_window', 'lynk_unlock', 'lynk_kjck'],
+    available: ['lynk_window', 'lynk_unlock', 'lynk_kjck'],
+    controlDirections: {},
+    controlLabels: { lynk_window: '车窗', lynk_unlock: '车锁', lynk_kjck: '后备箱' },
+    vehicle: { updatedAt: 1700000000000, updatedLabel: '11/26 20:01' }
+  })
+  assert.equal(circle.page.useTwoPageShell, true)
+  assert.equal(circle.page.singleCircleRangeText, '')
+  assert.equal(circle.page.displayRows.length, 1)
+  assert.equal(circle.page.displayRows[0].first.label, '车窗')
+  assert.equal(circle.page.displayRows[0].second.label, '车锁')
+  assert.equal(circle.page.displayRows[0].third.label, '后备箱')
+  assert.equal(circle.page.displayRows[0].first.watchOrbSizeStyle, 'watch-orb-trio')
+
+  circle.page.openSettings()
+  circle.page.changeTwoPage({ checked: false })
+  assert.equal(circle.page.circleTwoPage, false)
+  assert.equal(circle.page.twoPageChecked, false)
+  assert.equal(circle.page.useTwoPageShell, false)
+  assert.equal(storage.get('circle-two-page'), 'off')
+  circle.page.closeSettings()
+
+  const reopened = start({ native })
+  assert.equal(reopened.page.circleTwoPage, false)
+  assert.equal(reopened.page.useTwoPageShell, false)
+
+  reopened.hello({ features: ['confirm', 'cancel', 'refresh'] })
+  reopened.reply({
+    brand: 'GALAXY',
+    mapped: ['lock', 'climate', 'window_vent', 'trunk'],
+    available: ['lock', 'climate'],
+    controlDirections: { lock: 'unlock', climate: 'open' },
+    vehicle: { totalKm: 641, electricKm: 124, fuelKm: 517, updatedAt: 1700000000000, updatedLabel: '10:00' }
+  })
+  assert.equal(reopened.page.displayRows.length, 2)
+  assert.equal(reopened.page.displayRows[0].third.id, '')
+  assert.equal(reopened.page.singleCircleRangeText, '641\u00a0km · 电 124\u00a0km · 油 517\u00a0km')
+
+  reopened.page.openSettings()
+  assert.equal(reopened.page.settingsOpen, true)
+  reopened.page.onOverlaySwipe({ direction: 'right' })
+  assert.equal(reopened.page.settingsOpen, false)
 })

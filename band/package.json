@@ -4,7 +4,8 @@
   "private": true,
   "license": "Apache-2.0",
   "scripts": {
-    "build": "aiot build"
+    "build": "aiot build",
+    "build:lite": "node scripts/build-lite.cjs"
   },
   "devDependencies": {
     "aiot-toolkit": "2.0.5"

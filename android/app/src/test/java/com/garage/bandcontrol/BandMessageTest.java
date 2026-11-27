@@ -67,6 +67,13 @@ public final class BandMessageTest {
         assertNull(bounded.optJSONObject("theme"));
     }
 
+    @Test public void preservesPhoneHapticsSettingInReplies() throws Exception {
+        JSONObject state = BandMessage.reply("hap_001", "ready", "车况").put("haptics", false);
+        JSONObject encoded = new JSONObject(BandMessage.encodeReply("hap_001",
+                () -> state, invalid -> fail(invalid.toString())));
+        assertEquals(false, encoded.getBoolean("haptics"));
+    }
+
     @Test public void decodesCarImageChunkRequestAndEncodesBoundedReply() throws Exception {
         BandMessage request = decode(new JSONObject().put("v", 1).put("id", "img_001")
                 .put("type", "car_image").put("hash", "abcDEF12_34-").put("index", 3));

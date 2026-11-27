@@ -107,6 +107,7 @@ public final class MainActivity extends Activity {
     private View themePreviewShade;
     private TextView themeSummary;
     private Button bandDisplayButton;
+    private Switch hapticsToggle;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -283,11 +284,7 @@ public final class MainActivity extends Activity {
         LinearLayout voicePanel = panel();
         LinearLayout voiceHeader = row();
         voiceHeader.addView(text("米家语音", 18, INK, true), new LinearLayout.LayoutParams(0, -2, 1));
-        voiceToggle = new Switch(this);
-        voiceToggle.setContentDescription("米家语音直控");
-        themeStyles.bind(voiceToggle, (view, palette) -> ((Switch) view).setThumbTintList(new ColorStateList(
-                new int[][]{{android.R.attr.state_checked}, {}},
-                new int[]{foreground(MINT, palette), foreground(MUTED, palette)})));
+        voiceToggle = styledSwitch("米家语音直控");
         voiceToggle.setOnCheckedChangeListener((button, checked) -> {
             if (checked != app.voiceEnabled()) app.setVoiceEnabled(checked);
         });
@@ -331,6 +328,20 @@ public final class MainActivity extends Activity {
         add(bandPanel, buildWearableThemePreview(), 8);
         bandDisplayButton = button("手环布局", this::chooseBandDisplay);
         add(bandPanel, bandDisplayButton, 8);
+        LinearLayout hapticsRow = row();
+        hapticsRow.setPadding(dp(13), dp(10), dp(12), dp(10));
+        bindSurface(hapticsRow, CONTROL, 12);
+        LinearLayout hapticsCopy = column();
+        hapticsCopy.addView(text("车控震动", 14, INK, false));
+        add(hapticsCopy, text("轻量版手环确认、执行与异常提示时短震", 12, MUTED, false), 2);
+        hapticsRow.addView(hapticsCopy, new LinearLayout.LayoutParams(0, -2, 1));
+        hapticsToggle = styledSwitch("手环车控震动");
+        hapticsToggle.setOnCheckedChangeListener((button, checked) -> {
+            if (checked != app.wearableHaptics()) app.setWearableHaptics(checked);
+        });
+        hapticsRow.addView(hapticsToggle);
+        hapticsRow.setOnClickListener(view -> hapticsToggle.toggle());
+        add(bandPanel, hapticsRow, 8);
         add(bandPanel, text("仅在搭配小米手环或手表端「腕上银河」时需要启动通信。", 13, MUTED, false), 8);
         add(screen, bandPanel, 12);
 
@@ -471,6 +482,7 @@ public final class MainActivity extends Activity {
     private void updateScreen() {
         vehicleNameText.setText(app.vehicleName());
         bandDisplayButton.setText("手环布局 · " + (app.bandDisplay().twoPage() ? "双屏" : "单屏"));
+        hapticsToggle.setChecked(app.wearableHaptics());
         GalaxyWidgets.Card card = app.widgets.primary();
         showWidget(card);
         String link = app.link.status();
@@ -982,6 +994,15 @@ public final class MainActivity extends Activity {
 
     private void bindSurface(View view, int color, int radius) {
         themeStyles.bind(view, (target, palette) -> target.setBackground(rounded(surfaceColor(color, palette), radius)));
+    }
+
+    private Switch styledSwitch(String description) {
+        Switch toggle = new Switch(this);
+        toggle.setContentDescription(description);
+        themeStyles.bind(toggle, (view, palette) -> ((Switch) view).setThumbTintList(new ColorStateList(
+                new int[][]{{android.R.attr.state_checked}, {}},
+                new int[]{foreground(MINT, palette), foreground(MUTED, palette)})));
+        return toggle;
     }
 
     private static int foreground(int color, ThemeStyles.Palette palette) {

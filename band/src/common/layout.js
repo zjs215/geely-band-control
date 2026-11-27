@@ -18,7 +18,7 @@ const CLASS_KEYS = [
   'confirmAction', 'confirmIcon', 'confirmTitle', 'confirmActions', 'confirmButton',
   'cancelButton', 'settingsScreen', 'settingsTitle', 'hapticsSetting',
   'hapticsLabel', 'hapticsSwitch', 'diagnostics', 'diagnosticsTitle',
-  'diagnosticsLine', 'settingsBack'
+  'diagnosticsLine', 'settingsBack', 'settingsBackIcon', 'settingsBackText'
 ]
 
 const BASE_NAMES = {
@@ -73,7 +73,9 @@ const BASE_NAMES = {
   diagnostics: 'diagnostics',
   diagnosticsTitle: 'diagnostics-title',
   diagnosticsLine: 'diagnostics-line',
-  settingsBack: 'settings-back'
+  settingsBack: 'settings-back',
+  settingsBackIcon: 'settings-back-icon',
+  settingsBackText: 'settings-back-text'
 }
 
 export function resolveLayoutProfile(info) {

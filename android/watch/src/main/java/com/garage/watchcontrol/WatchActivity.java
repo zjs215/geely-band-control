@@ -95,6 +95,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private record IconSyncTarget(String hash, int total) {}
     private static final String EVENTS_KEY = "connection-events";
     private static final String HAPTICS_KEY = "control-haptics";
+    private static final String TWO_PAGE_KEY = "watch-two-page";
     private static final String PHONE_ADDR_KEY = "preferred-phone-address";
     private static final String LOCAL_THEME_KEY = "theme-local";
     private static final String PHONE_THEME_KEY = "theme-phone";
@@ -113,8 +114,15 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
 
     private FrameLayout homeShell;
     private VerticalPagerView homePager;
+    private LinearLayout pagerDots;
     private View pagerDot0;
     private View pagerDot1;
+    private LinearLayout singlePage;
+    private TextView singleRefreshView;
+    private TextView singleRangeView;
+    private ImageView singleCarView;
+    private TextView singleEmptyView;
+    private LinearLayout singleGridContainer;
     private ScrollView settingsScroll;
     private LinearLayout confirmScreen;
     private FrameLayout toastBox;
@@ -143,6 +151,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private ImageView confirmIconView;
     private TextView confirmTitleView;
     private Switch hapticsSwitch;
+    private Switch twoPageSwitch;
     private TextView phoneTargetView;
     private LinearLayout diagnosticsBox;
     private ImageView themeBackdrop;
@@ -165,6 +174,14 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private WatchProtocol.WatchScale uiScale;
     private boolean settingsOpen;
     private boolean hapticsEnabled = true;
+    private boolean twoPageMode = true;
+    private Object backInvokedCallback;
+    private boolean backCallbackRegistered;
+    private boolean swipeTracking;
+    private boolean swipeTriggered;
+    private float swipeStartX;
+    private float swipeStartY;
+    private String singleRangeSummary = "";
     private boolean handshakeComplete;
     private boolean linked;
     private boolean hasReply;
@@ -236,6 +253,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         followPhoneTheme = prefs.getBoolean(FOLLOW_THEME_KEY, true);
         vibrator = getSystemService(Vibrator.class);
         hapticsEnabled = !"off".equals(prefs.getString(HAPTICS_KEY, "on"));
+        twoPageMode = !"off".equals(prefs.getString(TWO_PAGE_KEY, "on"));
         roundScreen = getResources().getConfiguration().isScreenRound();
         DisplayMetrics dm = getResources().getDisplayMetrics();
         controlColumns = WatchProtocol.controlColumns(roundScreen, dm.widthPixels, dm.heightPixels);
@@ -267,6 +285,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             interruptedExecution = false;
             showExecutionReceipt("unknown", "");
         }
+        updateBackInvokedCallback();
         ensureBluetoothAndConnect();
     }
 
@@ -277,30 +296,122 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         super.onStop();
     }
 
+    @Override protected void onDestroy() {
+        unregisterBackInvokedCallback();
+        super.onDestroy();
+    }
+
     @Override public void onConfigurationChanged(Configuration configuration) {
         super.onConfigurationChanged(configuration);
         themeClock.refresh();
     }
 
-    @Override public void onBackPressed() {
+    private boolean hasBackTarget() {
+        return WatchProtocol.shouldInterceptBack(!confirmTitle.isEmpty(), settingsOpen,
+                useTwoPageShell(), homePager != null ? homePager.currentPage() : 0);
+    }
+
+    private boolean handleBackNavigation() {
         if (!confirmTitle.isEmpty()) {
             cancelConfirmation();
-            return;
+            return true;
         }
         if (settingsOpen) {
             settingsOpen = false;
             renderScreens();
-            return;
+            return true;
         }
-        if (homePager.currentPage() > 0) {
+        if (useTwoPageShell() && homePager != null && homePager.currentPage() > 0) {
             homePager.setCurrentPage(0, true);
-            return;
+            updateBackInvokedCallback();
+            return true;
         }
+        return false;
+    }
+
+    private void updateBackInvokedCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        boolean needCallback = hasBackTarget();
+        if (needCallback && !backCallbackRegistered) {
+            android.window.OnBackInvokedCallback callback =
+                    (android.window.OnBackInvokedCallback) backInvokedCallback;
+            if (callback == null) {
+                callback = this::handleBackNavigation;
+                backInvokedCallback = callback;
+            }
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                    android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+            backCallbackRegistered = true;
+        } else if (!needCallback && backCallbackRegistered) {
+            unregisterBackInvokedCallback();
+        }
+    }
+
+    private void unregisterBackInvokedCallback() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !backCallbackRegistered) return;
+        android.window.OnBackInvokedCallback callback =
+                (android.window.OnBackInvokedCallback) backInvokedCallback;
+        if (callback != null) {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(callback);
+        }
+        backCallbackRegistered = false;
+    }
+
+    private boolean isTouchOnView(View view, MotionEvent event) {
+        if (view == null || view.getVisibility() != View.VISIBLE) return false;
+        int[] loc = new int[2];
+        view.getLocationOnScreen(loc);
+        float x = event.getRawX();
+        float y = event.getRawY();
+        return x >= loc[0] && x <= loc[0] + view.getWidth()
+                && y >= loc[1] && y <= loc[1] + view.getHeight();
+    }
+
+    @Override public boolean dispatchTouchEvent(MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            swipeStartX = event.getX();
+            swipeStartY = event.getY();
+            swipeTriggered = false;
+            swipeTracking = !isTouchOnView(hapticsSwitch, event) && !isTouchOnView(twoPageSwitch, event);
+        } else if (action == MotionEvent.ACTION_MOVE && swipeTracking && !swipeTriggered) {
+            float dx = event.getX() - swipeStartX;
+            float dy = Math.abs(event.getY() - swipeStartY);
+            if (!confirmTitle.isEmpty() || settingsOpen) {
+                if (dx > r(42) && dx > dy * 1.6f) {
+                    swipeTriggered = true;
+                    swipeTracking = false;
+                    MotionEvent cancel = MotionEvent.obtain(event);
+                    cancel.setAction(MotionEvent.ACTION_CANCEL);
+                    super.dispatchTouchEvent(cancel);
+                    cancel.recycle();
+                    handleBackNavigation();
+                    return true;
+                }
+            } else if (!hasBackTarget()) {
+                if (swipeStartX <= r(36) && dx > r(72) && dx > dy * 1.8f) {
+                    swipeTriggered = true;
+                    swipeTracking = false;
+                    finish();
+                    return true;
+                }
+            }
+        } else if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+            boolean consumed = swipeTriggered;
+            swipeTracking = false;
+            swipeTriggered = false;
+            if (consumed) return true;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
+    @Override public void onBackPressed() {
+        if (handleBackNavigation()) return;
         super.onBackPressed();
     }
 
     @Override public boolean dispatchGenericMotionEvent(MotionEvent event) {
-        if (homeShell != null && homeShell.getVisibility() == View.VISIBLE
+        if (useTwoPageShell() && homeShell != null && homeShell.getVisibility() == View.VISIBLE
                 && homePager != null && homePager.handleCrownMotion(event)) {
             return true;
         }
@@ -938,6 +1049,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         }
         String updated = vehicle == null ? "" : vehicle.optString("updatedLabel");
         updatedLabel = updated.isEmpty() ? "等待车况" : (cached ? "上次 " : "") + updated;
+        singleRangeSummary = WatchProtocol.singleScreenRangeSummary(vehicle);
     }
 
     private void updateBar(View fill, int percent) {
@@ -1150,9 +1262,13 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         return decoded;
     }
 
+    private void showCarBitmap(Bitmap bitmap) {
+        if (carImageView != null) carImageView.setImageBitmap(bitmap);
+        if (singleCarView != null) singleCarView.setImageBitmap(bitmap);
+    }
+
     private void showDefaultCarImage() {
-        if (carImageView == null) return;
-        carImageView.setImageBitmap(assetBitmap("starshine-8.png"));
+        showCarBitmap(assetBitmap("starshine-8.png"));
     }
 
     private void loadCachedCarImage() {
@@ -1165,7 +1281,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath());
         if (bitmap != null) {
             carImageHash = hash;
-            carImageView.setImageBitmap(bitmap);
+            showCarBitmap(bitmap);
         }
     }
 
@@ -1190,7 +1306,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             prefs.edit().putString("carImageBrand", brand).putString(CAR_IMAGE_HASH_KEY, hash)
                     .putString(CAR_IMAGE_FILE_KEY, target.getAbsolutePath()).apply();
             carImageHash = hash;
-            carImageView.setImageBitmap(bitmap);
+            showCarBitmap(bitmap);
             recordEvent("car_img_ok", null, hash);
         } catch (IllegalArgumentException | IOException failed) {
             failedCarImageHash = hash;
@@ -1367,9 +1483,24 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             renderDiagnostics();
             updatePhoneTargetLabel();
             settingsScroll.requestFocus();
-        } else {
+        } else if (useTwoPageShell()) {
             homePager.requestFocus();
+        } else if (singlePage != null) {
+            singlePage.requestFocus();
         }
+        updateBackInvokedCallback();
+    }
+
+    private boolean useTwoPageShell() {
+        return (!roundScreen && controlColumns == 1) || twoPageMode;
+    }
+
+    private void applyShellMode() {
+        boolean twoPage = useTwoPageShell();
+        if (homePager != null) homePager.setVisibility(twoPage ? View.VISIBLE : View.GONE);
+        if (pagerDots != null) pagerDots.setVisibility(twoPage ? View.VISIBLE : View.GONE);
+        if (singlePage != null) singlePage.setVisibility(twoPage ? View.GONE : View.VISIBLE);
+        updateBackInvokedCallback();
     }
 
     private void renderMeta() {
@@ -1385,50 +1516,85 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         vehicleParkedIcon.setVisibility("已驻车".equals(motionLabel) ? View.VISIBLE : View.GONE);
         String pullText = homePager.pullRefreshText();
         controlsRefreshView.setText(pullText.isEmpty() ? refreshText : pullText);
+        if (singleRefreshView != null) {
+            singleRefreshView.setText(refreshText);
+        }
+        if (singleRangeView != null) {
+            singleRangeView.setText(singleRangeSummary);
+            singleRangeView.setVisibility(singleRangeSummary.isEmpty() ? View.GONE : View.VISIBLE);
+        }
         boolean online = "已连接".equals(modeLabel) || "演示".equals(modeLabel);
         GradientDrawable dotBg = (GradientDrawable) connectionDot.getBackground();
         dotBg.setColor(online ? MINT : Color.rgb(120, 134, 140));
     }
 
     private void renderGrid() {
-        gridContainer.removeAllViews();
+        if (gridContainer != null) renderControlRows(gridContainer, emptyView, false);
+        if (singleGridContainer != null) renderControlRows(singleGridContainer, singleEmptyView, true);
+    }
+
+    private void renderControlRows(LinearLayout targetGrid, TextView targetEmpty, boolean compactSingleScreen) {
+        targetGrid.removeAllViews();
         if (!compatibilityNotice.isEmpty()) {
-            emptyView.setText(compatibilityNotice);
-            emptyView.setVisibility(View.VISIBLE);
+            targetEmpty.setText(compatibilityNotice);
+            targetEmpty.setVisibility(View.VISIBLE);
             return;
         }
         if (mapped.isEmpty()) {
-            emptyView.setText(linked ? "请在手机配置" + brandName() + "卡片" : "连接手机后显示已映射车控");
-            emptyView.setVisibility(View.VISIBLE);
+            targetEmpty.setText(linked ? "请在手机配置" + brandName() + "卡片" : "连接手机后显示已映射车控");
+            targetEmpty.setVisibility(View.VISIBLE);
             return;
         }
-        emptyView.setVisibility(View.GONE);
+        targetEmpty.setVisibility(View.GONE);
         int count = mapped.size();
-        int orbSize = controlColumns == 1 ? r(38) : u(uiScale.roundOrb336(count), count <= 1 ? 72 : count == 2 ? 62 : 46);
-        int iconSize = controlColumns == 1 ? r(28) : u(uiScale.roundIcon336(count), count <= 1 ? 48 : count == 2 ? 42 : 32);
-        int label336 = uiScale.roundLabel336(count);
-        int labelRectSp = count <= 1 ? 17 : count == 2 ? 16 : 14;
-        int tileHeight = controlColumns == 1 ? r(56) : count <= 1 ? r(114) : count == 2 ? r(102) : r(90);
-        for (int i = 0; i < count; i += controlColumns) {
-            String first = mapped.get(i);
-            String second = controlColumns == 2 && i + 1 < count ? mapped.get(i + 1) : null;
+        int rowColumns = WatchProtocol.controlRowColumns(controlColumns, count);
+        boolean single = rowColumns == 1;
+        int orbSize;
+        int iconSize;
+        int label336;
+        int labelRectSp;
+        int tileHeight;
+        if (compactSingleScreen) {
+            if (count == 4) {
+                orbSize = u(34, 32);
+                iconSize = u(26, 24);
+                label336 = 13;
+                labelRectSp = 12;
+                tileHeight = r(60);
+            } else {
+                orbSize = u(count <= 1 ? 52 : count == 2 ? 44 : 36, count <= 1 ? 46 : count == 2 ? 40 : 34);
+                iconSize = u(count <= 1 ? 38 : count == 2 ? 34 : 28, count <= 1 ? 34 : count == 2 ? 30 : 25);
+                label336 = count <= 1 ? 16 : count == 2 ? 14 : 13;
+                labelRectSp = 13;
+                tileHeight = u(count <= 2 ? 76 : 70, 68);
+            }
+        } else {
+            orbSize = single ? r(34) : u(uiScale.roundOrb336(count), count <= 1 ? 56 : count == 2 ? 48 : count == 3 ? 36 : 38);
+            iconSize = single ? r(24) : u(uiScale.roundIcon336(count), count <= 1 ? 42 : count == 2 ? 36 : count == 3 ? 26 : 28);
+            label336 = uiScale.roundLabel336(count);
+            labelRectSp = count <= 1 ? 16 : count == 2 ? 15 : count == 3 ? 12 : 13;
+            tileHeight = single ? r(52) : count <= 1 ? r(98) : count == 2 ? r(88) : count == 3 ? r(74) : r(80);
+        }
+        int rowGap = compactSingleScreen ? r(6) : r(8);
+        int colGap = rowColumns == 3 ? r(6) : r(8);
+        for (int i = 0; i < count; i += rowColumns) {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER);
             LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(-1, -2);
-            if (i > 0) rowParams.topMargin = r(8);
-            row.addView(buildOrbTile(first, orbSize, iconSize, label336, labelRectSp),
-                    new LinearLayout.LayoutParams(0, tileHeight, 1));
-            if (second != null) {
-                LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(0, tileHeight, 1);
-                secondParams.setMarginStart(r(8));
-                row.addView(buildOrbTile(second, orbSize, iconSize, label336, labelRectSp), secondParams);
+            if (i > 0) rowParams.topMargin = rowGap;
+            for (int col = 0; col < rowColumns && i + col < count; col++) {
+                LinearLayout.LayoutParams tileParams = new LinearLayout.LayoutParams(0, tileHeight, 1);
+                if (col > 0) tileParams.setMarginStart(colGap);
+                row.addView(buildOrbTile(mapped.get(i + col), orbSize, iconSize, label336, labelRectSp,
+                        single, compactSingleScreen), tileParams);
             }
-            gridContainer.addView(row, rowParams);
+            targetGrid.addView(row, rowParams);
         }
     }
 
-    private View buildOrbTile(String action, int orbSize, int iconSize, int label336, int labelRectSp) {
+    private View buildOrbTile(String action, int orbSize, int iconSize, int label336, int labelRectSp,
+                              boolean single, boolean compactSingleScreen) {
         boolean isAvailable = available.contains(action);
         String direction = controlDirections.get(action);
         boolean isActive = WatchProtocol.isActionActive(action, direction, isAvailable);
@@ -1439,8 +1605,8 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
                 : (!isAvailable && !controlPending ? "暂不可用" : "");
 
         LinearLayout cell = new LinearLayout(this);
-        boolean single = controlColumns == 1;
-        cell.setOrientation(single ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        boolean hasSingle = single;
+        cell.setOrientation(hasSingle ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         cell.setGravity(Gravity.CENTER);
         boolean day = themeStyles.isDay();
         int panel = isAvailable
@@ -1448,14 +1614,15 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
                     ? (day ? 0xdb8ec5ff : 0x9e1862e8)
                     : (day ? 0xc2f3f8fc : 0xb81d2c43))
                 : (day ? 0x7ae0eaf2 : 0x8f121c2a);
-        GradientDrawable tileBackground = rounded(panel, 13);
+        GradientDrawable tileBackground = rounded(panel, 14);
         cell.setBackground(tileBackground);
-        cell.setPadding(r(8), r(3), r(8), r(3));
+        cell.setPadding(r(6), compactSingleScreen ? r(2) : r(4), r(6), compactSingleScreen ? r(2) : r(4));
         if (slotHint.isEmpty()) cell.setOnClickListener(view -> selectAction(action));
         else cell.setEnabled(false);
 
         FrameLayout orb = new FrameLayout(this);
         ImageView icon = new ImageView(this);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
         Bitmap syncedIcon = controlIconBitmap(action);
         if (syncedIcon != null) {
             icon.setTag(Boolean.TRUE);
@@ -1481,7 +1648,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         labels.setGravity(Gravity.CENTER_HORIZONTAL);
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(-1, -2);
         if (single) {
-            int width = getResources().getDisplayMetrics().widthPixels - 2 * u(28, 12) - r(24) - compactOrb;
+            int width = getResources().getDisplayMetrics().widthPixels - 2 * u(34, 12) - r(24) - compactOrb;
             labelParams.width = Math.max(0, Math.min(r(94), width));
             labelParams.setMarginStart(r(8));
         } else {
@@ -1490,8 +1657,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         labels.addView(labelView);
 
         if (!hint.isEmpty() && !isLoading) {
-            TextView hintView = text(hint, 12, 10, MUTED, false);
+            TextView hintView = text(hint, 11, 10, MUTED, false);
             hintView.setSingleLine(true);
+            hintView.setEllipsize(TextUtils.TruncateAt.END);
             hintView.setGravity(Gravity.CENTER);
             labels.addView(hintView);
         }
@@ -1595,13 +1763,16 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         classicMileageBackground = mileagePage.getBackground();
         homePager.addView(mileagePage);
         homePager.addView(buildControlsPage());
-        homePager.setOnPageChangeListener(this::updatePagerDots);
+        homePager.setOnPageChangeListener(page -> {
+            updatePagerDots(page);
+            updateBackInvokedCallback();
+        });
         homePager.setOnCrownHapticListener(this::vibrateCrown);
         homePager.setOnPullRefresh(this::renderMeta, this::triggerRefresh,
                 () -> visible && !isBusy() && !settingsOpen && !controlPending && confirmTitle.isEmpty());
         homeShell.addView(homePager, new FrameLayout.LayoutParams(-1, -1));
 
-        LinearLayout pagerDots = new LinearLayout(this);
+        pagerDots = new LinearLayout(this);
         pagerDots.setOrientation(LinearLayout.VERTICAL);
         pagerDots.setGravity(Gravity.CENTER_HORIZONTAL);
         pagerDot0 = new View(this);
@@ -1617,6 +1788,10 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         FrameLayout.LayoutParams dotsParams = new FrameLayout.LayoutParams(-2, -2, Gravity.END | Gravity.CENTER_VERTICAL);
         dotsParams.setMarginEnd(u(11, 10));
         homeShell.addView(pagerDots, dotsParams);
+
+        singlePage = buildSinglePage();
+        homeShell.addView(singlePage, new FrameLayout.LayoutParams(-1, -1));
+        applyShellMode();
 
         int safeInset = u(50, 14);
         confirmScreen = new LinearLayout(this);
@@ -1658,11 +1833,17 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         settingsScroll.addView(settingsContent, new ScrollView.LayoutParams(-1, -2));
 
         settingsContent.addView(text("设置", 21, 18, INK, true));
-        themeSetting = actionButton("外观主题", META, INK, false, view -> openThemeEditor());
-        themeSetting.setMinHeight(u(42, 44));
+        LinearLayout themeBox = new LinearLayout(this);
+        themeBox.setOrientation(LinearLayout.VERTICAL);
+        bindSurface(themeBox, META, 12);
+        themeBox.setPadding(r(10), r(8), r(10), r(8));
+        themeBox.addView(text("外观主题", 14, 13, INK, true));
+        themeSetting = text("", 12, 11, MUTED, false);
+        themeBox.addView(themeSetting);
+        themeBox.setOnClickListener(view -> openThemeEditor());
         LinearLayout.LayoutParams themeParams = new LinearLayout.LayoutParams(-1, -2);
         themeParams.topMargin = r(10);
-        settingsContent.addView(themeSetting, themeParams);
+        settingsContent.addView(themeBox, themeParams);
         LinearLayout hapticsBox = new LinearLayout(this);
         hapticsBox.setGravity(Gravity.CENTER_VERTICAL);
         bindSurface(hapticsBox, META, 12);
@@ -1681,6 +1862,29 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         LinearLayout.LayoutParams hbParams = new LinearLayout.LayoutParams(-1, -2);
         hbParams.topMargin = r(10);
         settingsContent.addView(hapticsBox, hbParams);
+
+        if (roundScreen || controlColumns == 2) {
+            LinearLayout twoPageBox = new LinearLayout(this);
+            twoPageBox.setGravity(Gravity.CENTER_VERTICAL);
+            bindSurface(twoPageBox, META, 12);
+            twoPageBox.setPadding(r(10), r(8), r(10), r(8));
+            twoPageBox.addView(text("双屏显示", 15, 14, INK, false), new LinearLayout.LayoutParams(0, -2, 1));
+            twoPageSwitch = new Switch(this);
+            twoPageSwitch.setChecked(twoPageMode);
+            themeStyles.bind(twoPageSwitch, (view, palette) -> ((Switch) view).setThumbTintList(new ColorStateList(
+                    new int[][]{{android.R.attr.state_checked}, {}},
+                    new int[]{foreground(MINT, palette), foreground(MUTED, palette)})));
+            twoPageSwitch.setOnCheckedChangeListener((buttonView, checked) -> {
+                twoPageMode = checked;
+                prefs.edit().putString(TWO_PAGE_KEY, checked ? "on" : "off").apply();
+                applyShellMode();
+                renderAll();
+            });
+            twoPageBox.addView(twoPageSwitch);
+            LinearLayout.LayoutParams tpParams = new LinearLayout.LayoutParams(-1, -2);
+            tpParams.topMargin = r(8);
+            settingsContent.addView(twoPageBox, tpParams);
+        }
 
         LinearLayout phoneBox = new LinearLayout(this);
         phoneBox.setOrientation(LinearLayout.VERTICAL);
@@ -1702,11 +1906,25 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         diagParams.topMargin = r(8);
         settingsContent.addView(diagnosticsBox, diagParams);
 
-        TextView backBtn = actionButton("返回", META, INK, false, view -> {
+        LinearLayout backBtn = new LinearLayout(this);
+        backBtn.setOrientation(LinearLayout.HORIZONTAL);
+        backBtn.setGravity(Gravity.CENTER);
+        bindSurface(backBtn, META, 14);
+        ImageView backIcon = new ImageView(this);
+        backIcon.setImageBitmap(assetBitmap("back.png"));
+        backIcon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        tintIcon(backIcon);
+        int backIconSize = u(18, 16);
+        backBtn.addView(backIcon, new LinearLayout.LayoutParams(backIconSize, backIconSize));
+        TextView backLabel = text("返回", 17, 15, INK, false);
+        LinearLayout.LayoutParams blParams = new LinearLayout.LayoutParams(-2, -2);
+        blParams.setMarginStart(r(6));
+        backBtn.addView(backLabel, blParams);
+        backBtn.setOnClickListener(view -> {
             settingsOpen = false;
             renderScreens();
         });
-        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(-1, r(40));
+        LinearLayout.LayoutParams backParams = new LinearLayout.LayoutParams(-1, u(44, 42));
         backParams.topMargin = r(10);
         settingsContent.addView(backBtn, backParams);
 
@@ -1734,8 +1952,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         int sidePadding = u(14, narrowScreen ? 9 : 14);
         page.setPadding(sidePadding, u(26, 27), sidePadding, u(8, 11));
         if (roundScreen) {
-            page.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                    new int[]{Color.rgb(19, 56, 122), Color.rgb(11, 33, 77), Color.rgb(3, 8, 18), Color.BLACK, Color.BLACK}));
+            GradientDrawable circleGradient = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                    new int[]{Color.rgb(19, 56, 122), Color.rgb(11, 33, 77), Color.rgb(3, 8, 18), Color.BLACK, Color.BLACK});
+            page.setBackground(circleGradient);
         }
 
         vehicleNameView = photoText(vehicleName, 20, 14, Color.rgb(238, 244, 255), true);
@@ -1858,7 +2077,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setGravity(Gravity.CENTER_HORIZONTAL);
-        page.setPadding(u(28, 12), u(15, narrowScreen ? 28 : 14), u(28, 12), u(15, narrowScreen ? 28 : 14));
+        page.setPadding(u(34, 12), u(14, narrowScreen ? 28 : 14), u(34, 12), u(14, narrowScreen ? 28 : 14));
 
         LinearLayout topPill = new LinearLayout(this);
         topPill.setOrientation(LinearLayout.HORIZONTAL);
@@ -1900,7 +2119,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         LinearLayout settingsPill = new LinearLayout(this);
         settingsPill.setOrientation(LinearLayout.HORIZONTAL);
         settingsPill.setGravity(Gravity.CENTER);
-        bindSurface(settingsPill, META, 19);
+        bindSurface(settingsPill, META, 18);
         ImageView gear = new ImageView(this);
         gear.setImageBitmap(assetBitmap("settings.png"));
         tintIcon(gear);
@@ -1915,7 +2134,87 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             settingsOpen = true;
             renderScreens();
         });
-        page.addView(settingsPill, new LinearLayout.LayoutParams(u(114, 110), u(38, 40)));
+        page.addView(settingsPill, new LinearLayout.LayoutParams(u(112, 110), u(36, 38)));
+
+        return page;
+    }
+
+    private LinearLayout buildSinglePage() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setGravity(Gravity.CENTER_HORIZONTAL);
+        page.setFocusable(true);
+        page.setFocusableInTouchMode(true);
+        page.setPadding(u(28, 12), u(15, 12), u(28, 12), u(12, 12));
+        if (roundScreen) {
+            page.setBackground(classicMileageBackground);
+        }
+
+        LinearLayout topPill = new LinearLayout(this);
+        topPill.setOrientation(LinearLayout.HORIZONTAL);
+        topPill.setGravity(Gravity.CENTER_VERTICAL);
+        topPill.setPadding(r(10), r(2), r(10), r(2));
+        ImageView refreshIcon = new ImageView(this);
+        refreshIcon.setImageBitmap(assetBitmap("refresh.png"));
+        topPill.addView(refreshIcon, new LinearLayout.LayoutParams(r(13), r(13)));
+        singleRefreshView = photoText("等待车况", 14, 13, INK, false);
+        singleRefreshView.setSingleLine(true);
+        singleRefreshView.setEllipsize(TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams srParams = new LinearLayout.LayoutParams(-2, -2);
+        srParams.setMarginStart(r(5));
+        topPill.addView(singleRefreshView, srParams);
+        topPill.setOnClickListener(v -> triggerRefresh());
+        page.addView(topPill, new LinearLayout.LayoutParams(-2, -2));
+
+        singleRangeView = photoText("", 13, 12, SUB_INK, false);
+        singleRangeView.setSingleLine(true);
+        singleRangeView.setEllipsize(TextUtils.TruncateAt.END);
+        singleRangeView.setGravity(Gravity.CENTER);
+        singleRangeView.setVisibility(View.GONE);
+        LinearLayout.LayoutParams rangeParams = new LinearLayout.LayoutParams(-1, -2);
+        rangeParams.topMargin = r(2);
+        page.addView(singleRangeView, rangeParams);
+
+        singleCarView = new ImageView(this);
+        singleCarView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams carParams = new LinearLayout.LayoutParams(-1, 0, 1);
+        carParams.topMargin = r(4);
+        carParams.bottomMargin = r(4);
+        page.addView(singleCarView, carParams);
+
+        FrameLayout controlsArea = new FrameLayout(this);
+        singleEmptyView = text("连接手机后显示已映射车控", 14, 12, MUTED, false);
+        singleEmptyView.setGravity(Gravity.CENTER);
+        bindSurface(singleEmptyView, ORB_UNASSIGNED, 14);
+        singleEmptyView.setPadding(r(10), r(10), r(10), r(10));
+        controlsArea.addView(singleEmptyView, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
+        singleGridContainer = new LinearLayout(this);
+        singleGridContainer.setOrientation(LinearLayout.VERTICAL);
+        singleGridContainer.setGravity(Gravity.CENTER);
+        controlsArea.addView(singleGridContainer, new FrameLayout.LayoutParams(-1, -2, Gravity.CENTER));
+        LinearLayout.LayoutParams areaParams = new LinearLayout.LayoutParams(-1, -2);
+        areaParams.bottomMargin = r(6);
+        page.addView(controlsArea, areaParams);
+
+        LinearLayout singleSettings = new LinearLayout(this);
+        singleSettings.setOrientation(LinearLayout.HORIZONTAL);
+        singleSettings.setGravity(Gravity.CENTER);
+        bindSurface(singleSettings, META, 17);
+        ImageView gear = new ImageView(this);
+        gear.setImageBitmap(assetBitmap("settings.png"));
+        tintIcon(gear);
+        int gearSize = u(15, 13);
+        singleSettings.addView(gear, new LinearLayout.LayoutParams(gearSize, gearSize));
+        TextView settingsLabel = text("设置", 13, 12, SUB_INK, false);
+        LinearLayout.LayoutParams slParams = new LinearLayout.LayoutParams(-2, -2);
+        slParams.setMarginStart(r(4));
+        singleSettings.addView(settingsLabel, slParams);
+        singleSettings.setOnClickListener(v -> {
+            if ((pending != null && !"hello".equals(pending.type())) || !confirmTitle.isEmpty()) return;
+            settingsOpen = true;
+            renderScreens();
+        });
+        page.addView(singleSettings, new LinearLayout.LayoutParams(u(104, 102), u(32, 34)));
 
         return page;
     }
@@ -1956,8 +2255,11 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
         if (palette == null) watchRoot.setBackground(classicRootBackground);
         else watchRoot.setBackgroundColor(palette.background());
         mileagePage.setBackground(hasArtwork ? null : classicMileageBackground);
+        if (singlePage != null && roundScreen) {
+            singlePage.setBackground(hasArtwork ? null : classicMileageBackground);
+        }
         String summary = active.summary(variant, ThemeConfig.SYSTEM_LABEL);
-        themeSetting.setText("外观主题\n" + (followPhoneTheme ? "跟随手机 · " : "") + summary);
+        themeSetting.setText((followPhoneTheme ? "跟随手机 · " : "") + summary);
         if (themeVariant != next) {
             themeVariant = next;
             themeStyles.apply(palette);

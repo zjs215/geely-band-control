@@ -2,9 +2,12 @@
 .temp_band/
 artifacts/
 android/.gradle/
+android/installer/.gradle/
 android/local.properties
 android/**/build/
 band/build/
+band/build-lite/
+band/.lite-build/
 band/dist/
 band/node_modules/
 band/sign/

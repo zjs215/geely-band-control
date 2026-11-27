@@ -39,6 +39,7 @@ public final class GarageApp extends Application {
     private static final String WEARABLE_THEME_KEY = "wearableTheme";
     private static final String BAND_DISPLAY_REV = "bandDisplayRevision";
     private static final String BAND_DISPLAY_TWO_PAGE = "bandDisplayTwoPage";
+    private static final String HAPTICS_ENABLED_KEY = "wearableHapticsEnabled";
     private static final int MAX_VEHICLE_NAME_LENGTH = 24;
     private static final long CONTROL_WAIT_MS = 5_000;
 
@@ -84,6 +85,7 @@ public final class GarageApp extends Application {
     private ThemeConfig phoneTheme = ThemeConfig.CLASSIC;
     private ThemeConfig wearableTheme = ThemeConfig.CLASSIC;
     private BandDisplay bandDisplay = BandDisplay.INITIAL;
+    private boolean wearableHaptics = true;
     private int armedCardId = AppWidgetManager.INVALID_APPWIDGET_ID;
     private long lynkAuthorization;
     private Dispatch dispatch;
@@ -115,6 +117,7 @@ public final class GarageApp extends Application {
             prefs.edit().putString(PHONE_THEME_KEY, phoneTheme.encode()).apply();
         }
         bandDisplay = new BandDisplay(prefs.getBoolean(BAND_DISPLAY_TWO_PAGE, false), prefs.getLong(BAND_DISPLAY_REV, 0));
+        wearableHaptics = prefs.getBoolean(HAPTICS_ENABLED_KEY, true);
         try {
             JSONArray saved = new JSONArray(prefs.getString("uiEvents", "[]"));
             for (int i = Math.max(0, saved.length() - 40); i < saved.length(); i++) {
@@ -201,6 +204,15 @@ public final class GarageApp extends Application {
         if (next.equals(bandDisplay)) return;
         bandDisplay = next;
         prefs.edit().putBoolean(BAND_DISPLAY_TWO_PAGE, next.twoPage()).putLong(BAND_DISPLAY_REV, next.revision()).apply();
+        changed();
+    }
+
+    boolean wearableHaptics() { return wearableHaptics; }
+
+    void setWearableHaptics(boolean enabled) {
+        if (wearableHaptics == enabled) return;
+        wearableHaptics = enabled;
+        prefs.edit().putBoolean(HAPTICS_ENABLED_KEY, enabled).apply();
         changed();
     }
 
@@ -487,7 +499,8 @@ public final class GarageApp extends Application {
             switch (request.type()) {
                 case "hello" -> send(node, request.id(), () -> {
                     JSONObject hello = BandMessage.helloReply(request.id(), BuildConfig.VERSION_NAME)
-                            .put("brand", brand.brand.name());
+                            .put("brand", brand.brand.name())
+                            .put("haptics", wearableHaptics);
                     hello.getJSONArray("features").put(BandMessage.COMPACT_EXECUTE_ACK);
                     return hello;
                 });
@@ -861,6 +874,7 @@ public final class GarageApp extends Application {
         JSONArray mapped = new JSONArray();
         response.put("mode", "live")
                 .put("vehicleName", vehicleName)
+                .put("haptics", wearableHaptics)
                 .put("theme", wearableTheme.forWearableSync(ThemeStyles.systemVariant(this)).json())
                 .put("brand", brand.brand.name()).put("available", available).put("mapped", mapped).put("vehicle", widgets.vehicle().json());
 
