@@ -1,3 +1,5 @@
+param([switch]$IncludeVelaIconVariants)
+
 $ErrorActionPreference = 'Stop'
 $project = Split-Path -Parent $PSScriptRoot
 & (Join-Path $PSScriptRoot 'prepare.ps1')
@@ -11,13 +13,6 @@ try {
 }
 
 $bandDir = Join-Path $project 'band'
-$bandIcon = Join-Path $bandDir 'src\common\icon.png'
-$localBandIcon = Join-Path $project '.local\band-res\icon.png'
-$backupBandIcon = $null
-if (Test-Path -LiteralPath $localBandIcon) {
-    $backupBandIcon = [IO.File]::ReadAllBytes($bandIcon)
-    Copy-Item -LiteralPath $localBandIcon -Destination $bandIcon -Force
-}
 Push-Location $bandDir
 try {
     & npm.cmd ci --no-audit --no-fund
@@ -29,27 +24,28 @@ try {
     & node --test test/garage.test.cjs test/garage-lite.test.cjs test/lynkco-regression.test.cjs
     if ($LASTEXITCODE -ne 0) { throw 'Vela protocol or control tests failed.' }
 } finally {
-    if ($null -ne $backupBandIcon) {
-        [IO.File]::WriteAllBytes($bandIcon, $backupBandIcon)
-    }
     Pop-Location
 }
 
-$artifacts = Join-Path $project 'artifacts'
-New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
 $manifest = Get-Content -LiteralPath (Join-Path $project 'band\src\manifest.json') -Raw | ConvertFrom-Json
+$artifacts = Join-Path $project ('artifacts\v' + $manifest.versionName)
+New-Item -ItemType Directory -Force -Path $artifacts | Out-Null
 $rpk = '{0}.debug.{1}.rpk' -f $manifest.package,$manifest.versionName
 $liteRpk = '{0}.lite.{1}.rpk' -f $manifest.package,$manifest.versionName
-Copy-Item -LiteralPath (Join-Path $project 'android\app\build\outputs\apk\debug\app-debug.apk') `
-    -Destination (Join-Path $artifacts 'galaxy-phone.apk') -Force
-Copy-Item -LiteralPath (Join-Path $project 'android\watch\build\outputs\apk\debug\watch-debug.apk') `
-    -Destination (Join-Path $artifacts 'galaxy-watch.apk') -Force
-Copy-Item -LiteralPath (Join-Path (Join-Path $project 'band\dist') $rpk) `
-    -Destination (Join-Path $artifacts 'galaxy-vela-band.rpk') -Force
-Copy-Item -LiteralPath (Join-Path (Join-Path $project 'band\dist') $liteRpk) `
-    -Destination (Join-Path $artifacts 'galaxy-vela-band-lite.rpk') -Force
-Get-ChildItem -LiteralPath $artifacts -File | Select-Object Name,Length
-$checksums = Get-ChildItem -LiteralPath $artifacts -File | Where-Object { $_.Extension -in '.apk','.rpk' } | ForEach-Object {
-    '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name
+$packages = [ordered]@{
+    'pocket-car-control.apk' = Join-Path $project 'android\app\build\outputs\apk\debug\app-debug.apk'
+    'wrist-car-control-watch.apk' = Join-Path $project 'android\watch\build\outputs\apk\debug\watch-debug.apk'
+    'wrist-car-control.rpk' = Join-Path $bandDir "dist\$rpk"
+    'wrist-car-control-lite.rpk' = Join-Path $bandDir "dist\$liteRpk"
+}
+$checksums = foreach ($name in $packages.Keys) {
+    $target = Join-Path $artifacts $name
+    Copy-Item -LiteralPath $packages[$name] -Destination $target -Force
+    '{0}  {1}' -f (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant(), $name
 }
 Set-Content -LiteralPath (Join-Path $artifacts 'SHA256SUMS.txt') -Value $checksums -Encoding Ascii
+if ($IncludeVelaIconVariants) {
+    & node (Join-Path $bandDir 'scripts\build-icon-variants.cjs') (Join-Path $artifacts 'icons')
+    if ($LASTEXITCODE -ne 0) { throw 'Vela icon variant builds failed.' }
+}
+Get-ChildItem -LiteralPath $artifacts -File | Select-Object Name,Length

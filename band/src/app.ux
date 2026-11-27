@@ -1,7 +1,7 @@
 <script>
 export default {
   onError(error) {
-    console.error('腕上银河运行异常', error && (error.message || error))
+    console.error('腕上车控运行异常', error && (error.message || error))
   }
 }
 </script>

@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 0.3.1
+
+- 手机端选中米家指令码后先显示手动控制引导与示例，确认后复制指令并打开米家。车辆名称可点旁边的铅笔图标修改，穿戴主题可上下滑动选择并预览日景和夜景。
+- Android 手机端更名为「口袋车控」，Watch 5 和 Vela（含 Lite）更名为「腕上车控」。默认启用紫色软胶图标，Android 手机与 Watch 5 可在应用内切换四套图标。Vela 可安装同包名、同签名的对应图标 RPK。
+- Android 代码包迁至 `com.otrong.carcontrol` 下的 phone、watch、appearance 和 installer。手机与穿戴包继续使用 `com.garage.bandcontrol`，安装助手继续使用 `com.garage.bandcontrol.installer`。
+- 安装助手可安装手机端，并按设备选择完整版 RPK、Lite RPK 或 Watch 5 APK。支持检查 GitHub 稳定版、核对 SHA-256 和使用内置包离线安装。
+- 手机、Watch 5、Vela 完整版和 Lite、安装助手统一为 0.3.1（`versionCode` 51）。
+
 ## 0.2.12
 
 - 手机 APK、Watch APK 和手环 RPK（含 Lite 版）统一升级为 0.2.12（`versionCode` 49），配套穿戴安装助手升级为 `0.1.1`（`versionCode` 2）。

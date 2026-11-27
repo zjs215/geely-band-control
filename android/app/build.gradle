@@ -11,16 +11,16 @@ if (!signingFile.isFile()) {
 signingFile.withInputStream { signing.load(it) }
 
 android {
-    namespace 'com.garage.bandcontrol'
+    namespace 'com.otrong.carcontrol.phone'
     compileSdk 36
 
     defaultConfig {
         applicationId 'com.garage.bandcontrol'
         minSdk 28
         targetSdk 35
-        versionCode 49
-        versionName '0.2.12'
-        testInstrumentationRunner 'com.garage.bandcontrol.LynkCardInstrumentation'
+        versionCode 51
+        versionName '0.3.1'
+        testInstrumentationRunner 'com.otrong.carcontrol.phone.LynkCardInstrumentation'
     }
 
     signingConfigs {

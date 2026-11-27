@@ -1,5 +1,6 @@
 <template>
   <stack class="page">
+    <div class="home-layout-pending" if="{{ !homeLayoutReady }}"></div>
     <scroll class="{{ ui.scrollPage + themeStage }}" scroll-y="true" if="{{ homeLayoutReady && !useTwoPageShell }}">
       <div class="{{ ui.homeScreen }}">
         <div class="{{ ui.range + themePanelClass }}" @click="toggleRange">

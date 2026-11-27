@@ -279,7 +279,7 @@ export function createGaragePage(options = {}) {
     watchHomeUi: watchHomeClasses('standard', INITIAL_LAYOUT),
     watchControlsUi: watchControlsClasses(INITIAL_LAYOUT),
     watchPage: 0,
-    homeLayoutReady: LITE,
+    homeLayoutReady: false,
     controlsPullText: '',
     controlsPullOffset: 0,
     controlsPullProgress: 0,
@@ -1350,7 +1350,7 @@ export function createGaragePage(options = {}) {
       } catch (error) {
         this.connection = null
         this.linkOpenState = 0
-        console.warn('腕上银河通信初始化失败', error && error.message)
+        console.warn('腕上车控通信初始化失败', error && error.message)
         if (manual || !this.reportedLinkIssue) {
           this.reportedLinkIssue = true
           this.recordEvent('disconnect', null, 'init_failed')

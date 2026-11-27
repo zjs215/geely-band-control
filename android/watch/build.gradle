@@ -11,15 +11,15 @@ if (!signingFile.isFile()) {
 signingFile.withInputStream { signing.load(it) }
 
 android {
-    namespace 'com.garage.watchcontrol'
+    namespace 'com.otrong.carcontrol.watch'
     compileSdk 36
 
     defaultConfig {
         applicationId 'com.garage.bandcontrol'
         minSdk 28
         targetSdk 35
-        versionCode 49
-        versionName '0.2.12'
+        versionCode 51
+        versionName '0.3.1'
     }
 
     signingConfigs {

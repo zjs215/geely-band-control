@@ -5,7 +5,7 @@ body:
     id: environment
     attributes:
       label: 设备和版本
-      description: 手机与 Android、车型年款、银河 App、小米运动健康、手环固件、双端腕上银河版本
+      description: 手机与 Android、车型年款、银河 App、小米运动健康、手环固件、双端腕上车控版本
     validations:
       required: true
   - type: textarea

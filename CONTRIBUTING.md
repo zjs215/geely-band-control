@@ -1,6 +1,6 @@
 # 参与开发
 
-感谢参与腕上银河。先阅读 [开发说明](docs/development.md) 和 [兼容性](docs/compatibility.md)。
+感谢参与腕上车控。先阅读 [开发说明](docs/development.md) 和 [兼容性](docs/compatibility.md)。
 
 提交问题时提供手机型号、Android 版本、银河 App 版本、手环型号与固件、双端应用版本，以及复现步骤。截图和日志请先去除姓名、账号、车牌、VIN、位置和设备标识。
 

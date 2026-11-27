@@ -18,13 +18,51 @@
         <activity
             android:name=".WatchActivity"
             android:configChanges="uiMode"
-            android:exported="true"
+            android:exported="false"
             android:launchMode="singleTop"
-            android:taskAffinity="">
+            android:taskAffinity="" />
+        <!-- Preserve the launcher component used by earlier versions. -->
+        <activity-alias
+            android:name="com.garage.watchcontrol.WatchActivity"
+            android:exported="true"
+            android:targetActivity=".WatchActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
+        </activity-alias>
+        <activity-alias
+            android:name="com.garage.bandcontrol.LauncherIconMono"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_mono"
+            android:targetActivity=".WatchActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name="com.garage.bandcontrol.LauncherIconCoral"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_coral"
+            android:targetActivity=".WatchActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name="com.garage.bandcontrol.LauncherIconCobalt"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_cobalt"
+            android:targetActivity=".WatchActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
     </application>
 </manifest>

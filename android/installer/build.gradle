@@ -6,15 +6,18 @@ plugins {
     id 'com.android.application' version '8.13.2'
 }
 
-def fullRpk = 'galaxy-vela-band.rpk'
-def watchApk = 'galaxy-watch.apk'
+def fullRpk = 'wrist-car-control.rpk'
+def liteRpk = 'wrist-car-control-lite.rpk'
+def watchApk = 'wrist-car-control-watch.apk'
+def phoneApk = 'pocket-car-control.apk'
 def productPackage = 'com.garage.bandcontrol'
+def bandManifest = new JsonSlurper().parse(file('../../band/src/manifest.json'))
 def packageDir = providers.gradleProperty('wearablePackageDir').map { file(it) }
-    .getOrElse(file('../../artifacts'))
+    .getOrElse(file("../../artifacts/v${bandManifest.versionName}"))
 def assetsDir = layout.buildDirectory.dir('generated/assets/wearable')
 
 android {
-    namespace 'com.garage.bandcontrol.installer'
+    namespace 'com.otrong.carcontrol.installer'
     compileSdk 36
     buildToolsVersion '36.0.0'
 
@@ -22,8 +25,8 @@ android {
         applicationId 'com.garage.bandcontrol.installer'
         minSdk 28
         targetSdk 35
-        versionCode 3
-        versionName '0.1.2'
+        versionCode 51
+        versionName '0.3.1'
     }
 
     sourceSets.main.assets.srcDir assetsDir
@@ -42,8 +45,10 @@ android {
 def prepareWearableAssets = tasks.register('prepareWearableAssets') {
     def checksumsFile = new File(packageDir, 'SHA256SUMS.txt')
     def rpkFile = new File(packageDir, fullRpk)
+    def liteFile = new File(packageDir, liteRpk)
     def watchFile = new File(packageDir, watchApk)
-    inputs.files(checksumsFile, rpkFile, watchFile)
+    def phoneFile = new File(packageDir, phoneApk)
+    inputs.files(checksumsFile, rpkFile, liteFile, watchFile, phoneFile)
     outputs.dir(assetsDir)
     doLast {
         def checksums = [:]
@@ -54,8 +59,12 @@ def prepareWearableAssets = tasks.register('prepareWearableAssets') {
 
         def sealedDir = assetsDir.get().dir('wearable').asFile
         sealedDir.mkdirs()
+        def retained = [fullRpk, liteRpk, watchApk, phoneApk, 'packages.properties']
+        sealedDir.listFiles()?.findAll { it.isFile() && !retained.contains(it.name) }?.each { obsolete ->
+            if (!obsolete.delete()) throw new GradleException('Cannot remove obsolete generated asset ' + obsolete.name)
+        }
         def metadata = new Properties()
-        [band: rpkFile, watch: watchFile].each { target, source ->
+        [band: rpkFile, lite: liteFile, watch: watchFile, phone: phoneFile].each { target, source ->
             byte[] data = source.bytes
             String digest = MessageDigest.getInstance('SHA-256').digest(data).encodeHex().toString()
             if (data.length == 0 || digest != checksums[source.name]) {
@@ -67,18 +76,25 @@ def prepareWearableAssets = tasks.register('prepareWearableAssets') {
             metadata.setProperty(target + '.sha256', digest)
         }
 
-        def manifest
-        new ZipFile(new File(sealedDir, fullRpk)).withCloseable { zip ->
-            def entry = zip.getEntry('manifest.json')
-            if (entry == null || zip.getEntry('META-INF/CERT') == null ||
-                    !zip.entries().any { it.name.startsWith('common/themes/') && it.name.endsWith('.jpg') }) {
-                throw new GradleException('The Band 10 Pro requires the signed full galaxy-vela-band.rpk')
+        def readRpkManifest = { String name, boolean full ->
+            new ZipFile(new File(sealedDir, name)).withCloseable { zip ->
+                def entry = zip.getEntry('manifest.json')
+                boolean hasThemes = zip.entries().any { it.name.startsWith('common/themes/') && it.name.endsWith('.jpg') }
+                if (entry == null || !zip.getEntry('META-INF/CERT')?.size || hasThemes != full) {
+                    throw new GradleException('Incorrect RPK variant or missing signature in ' + name)
+                }
+                def manifest = zip.getInputStream(entry).withCloseable { stream -> new JsonSlurper().parse(stream) }
+                if (manifest.package != productPackage || !manifest.deviceTypeList?.contains('watch') ||
+                        !manifest.versionName || !(manifest.versionCode instanceof Number) || manifest.versionCode <= 0) {
+                    throw new GradleException('Incorrect wrist app manifest in ' + name)
+                }
+                return manifest
             }
-            zip.getInputStream(entry).withCloseable { stream -> manifest = new JsonSlurper().parse(stream) }
         }
-        if (manifest.package != productPackage || !manifest.deviceTypeList?.contains('watch') ||
-                !manifest.versionName || !(manifest.versionCode instanceof Number) || manifest.versionCode <= 0) {
-            throw new GradleException('Incorrect wrist app manifest in galaxy-vela-band.rpk')
+        def manifest = readRpkManifest(fullRpk, true)
+        def lite = readRpkManifest(liteRpk, false)
+        if (lite.versionCode != manifest.versionCode || lite.versionName != manifest.versionName) {
+            throw new GradleException('Full and Lite RPK versions must match')
         }
 
         def suffix = System.getProperty('os.name').startsWith('Windows') ? '.exe' : ''
@@ -94,11 +110,29 @@ def prepareWearableAssets = tasks.register('prepareWearableAssets') {
         }.standardOutput.asText.get()
         if (!details.find() || details.group(1) != productPackage ||
                 !watchManifest.contains('android.hardware.type.watch') ||
-                !watchManifest.contains('com.garage.watchcontrol.WatchActivity')) {
-            throw new GradleException('galaxy-watch.apk must be the wrist app APK')
+                !watchManifest.contains('com.otrong.carcontrol.watch.WatchActivity') ||
+                details.group(2) != manifest.versionCode.toString() || details.group(3) != manifest.versionName) {
+            throw new GradleException('wrist-car-control-watch.apk must be the wrist app APK')
         }
+        def phoneBadging = providers.exec {
+            commandLine aapt, 'dump', 'badging', new File(sealedDir, phoneApk)
+        }.standardOutput.asText.get()
+        def phoneDetails = phoneBadging =~ /(?m)^package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'/
+        def phoneManifest = providers.exec {
+            commandLine aapt, 'dump', 'xmltree', new File(sealedDir, phoneApk), 'AndroidManifest.xml'
+        }.standardOutput.asText.get()
+        if (!phoneDetails.find() || phoneDetails.group(1) != productPackage ||
+                !phoneManifest.contains('com.otrong.carcontrol.phone.MainActivity') ||
+                phoneManifest.contains('android.hardware.type.watch') ||
+                phoneDetails.group(2) != manifest.versionCode.toString() || phoneDetails.group(3) != manifest.versionName) {
+            throw new GradleException('pocket-car-control.apk must be the phone app APK')
+        }
+        metadata.setProperty('phone.version', phoneDetails.group(3))
+        metadata.setProperty('phone.versionCode', phoneDetails.group(2))
         metadata.setProperty('band.version', manifest.versionName.toString())
         metadata.setProperty('band.versionCode', manifest.versionCode.toString())
+        metadata.setProperty('lite.version', lite.versionName.toString())
+        metadata.setProperty('lite.versionCode', lite.versionCode.toString())
         metadata.setProperty('watch.version', details.group(3))
         metadata.setProperty('watch.versionCode', details.group(2))
         new File(sealedDir, 'packages.properties').withOutputStream { metadata.store(it, null) }

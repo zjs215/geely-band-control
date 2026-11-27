@@ -1312,7 +1312,7 @@ test('Lynk voice routes only lock and window through prepare and wearable confir
 
 
 test('configurable Lynk slot and owner mark contracts remain separate from Galaxy icon catalog', () => {
-  const source = name => readFileSync(path.join(__dirname, '../../android/app/src/main/java/com/garage/bandcontrol/', name), 'utf8')
+  const source = name => readFileSync(path.join(__dirname, '../../android/app/src/main/java/com/otrong/carcontrol/phone/', name), 'utf8')
   const config = source('BrandConfig.java')
   for (const [container, icon, progress] of [['fr_unlock', 'unlock', 'pb_unlock'], ['fr_window', 'window', 'pb_window'],
       ['fr_kjck', 'kjck', 'pb_kjck'], ['fr_ccqk', 'ccqk_on', 'pb_ccqk_on']]) {

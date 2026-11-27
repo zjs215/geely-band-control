@@ -12,6 +12,6 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = 'GalaxyBandControl'
+rootProject.name = 'CarControl'
 include ':app'
 include ':watch'
