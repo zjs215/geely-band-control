@@ -1711,9 +1711,9 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             BluetoothPhoneClient.PairedDevice device = devices.get(i);
             labels[i + 1] = device.name() + "\n" + device.address();
         }
-        new AlertDialog.Builder(themeStyles.dialogContext(this))
+        AlertDialog dialog = new AlertDialog.Builder(themeStyles.dialogContext(this))
                 .setTitle("选择配对手机")
-                .setItems(labels, (dialog, index) -> {
+                .setItems(labels, (d, index) -> {
                     String selected = index == 0 ? "" : devices.get(index - 1).address();
                     client.setPreferredAddress(selected);
                     prefs.edit().putString(PHONE_ADDR_KEY, selected).apply();
@@ -1724,6 +1724,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
                 })
                 .setNegativeButton("取消", null)
                 .show();
+        ThemeDialogs.bindRotaryScroll(dialog, null);
     }
 
     private void updatePagerDots(int page) {

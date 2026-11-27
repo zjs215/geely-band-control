@@ -15,10 +15,19 @@ final class PhoneInstall {
     static final String ACTION = "com.garage.bandcontrol.installer.PHONE_INSTALL_RESULT";
 
     static int prepare(Context context, byte[] bytes) throws IOException, InterruptedException {
+        return preparePackage(context, BundledPackages.APP_PACKAGE, bytes);
+    }
+
+    static int prepareSelf(Context context, byte[] bytes) throws IOException, InterruptedException {
+        return preparePackage(context, context.getPackageName(), bytes);
+    }
+
+    private static int preparePackage(Context context, String packageName, byte[] bytes)
+            throws IOException, InterruptedException {
         PackageInstaller installer = context.getPackageManager().getPackageInstaller();
         PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        params.setAppPackageName(BundledPackages.APP_PACKAGE);
+        params.setAppPackageName(packageName);
         params.setSize(bytes.length);
         if (Build.VERSION.SDK_INT >= 31) {
             params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED);
@@ -62,8 +71,16 @@ final class PhoneInstall {
     }
 
     static AppUpdate.Installed installedVersion(Context context) {
+        return installedVersion(context, BundledPackages.APP_PACKAGE);
+    }
+
+    static AppUpdate.Installed selfVersion(Context context) {
+        return installedVersion(context, context.getPackageName());
+    }
+
+    private static AppUpdate.Installed installedVersion(Context context, String packageName) {
         try {
-            PackageInfo app = context.getPackageManager().getPackageInfo(BundledPackages.APP_PACKAGE, 0);
+            PackageInfo app = context.getPackageManager().getPackageInfo(packageName, 0);
             return new AppUpdate.Installed(app.versionName == null ? "" : app.versionName, app.getLongVersionCode());
         } catch (PackageManager.NameNotFoundException missing) {
             return null;

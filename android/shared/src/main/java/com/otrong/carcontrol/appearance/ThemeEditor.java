@@ -87,6 +87,10 @@ public final class ThemeEditor {
 
     private void open(String title, Runnable openLauncherIcons, BiConsumer<ThemeConfig, Boolean> save) {
         ScrollView scroll = new ScrollView(context);
+        if (wearable) {
+            scroll.setFocusable(true);
+            scroll.setFocusableInTouchMode(true);
+        }
         LinearLayout fields = new LinearLayout(context);
         fields.setOrientation(LinearLayout.VERTICAL);
         fields.setPadding(dp(wearable ? 8 : 20), dp(4), dp(wearable ? 8 : 20), dp(8));
@@ -114,6 +118,7 @@ public final class ThemeEditor {
 
         AlertDialog dialog = builder().setTitle(title).setView(scroll)
                 .setNegativeButton("取消", null).setPositiveButton("保存", null).show();
+        if (wearable) ThemeDialogs.bindRotaryScroll(dialog, scroll);
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(view -> {
             ThemeConfig value = draft();
             if (value == null) {
@@ -249,10 +254,11 @@ public final class ThemeEditor {
     }
 
     private void choose(String title, String[] choices, int current, IntConsumer select) {
-        builder().setTitle(title).setSingleChoiceItems(choices, current, (dialog, index) -> {
+        AlertDialog dialog = builder().setTitle(title).setSingleChoiceItems(choices, current, (d, index) -> {
             select.accept(index);
-            dialog.dismiss();
+            d.dismiss();
         }).setNegativeButton("返回", null).show();
+        if (wearable) ThemeDialogs.bindRotaryScroll(dialog, null);
     }
 
     private void pickTime(String title, int value, IntConsumer select) {

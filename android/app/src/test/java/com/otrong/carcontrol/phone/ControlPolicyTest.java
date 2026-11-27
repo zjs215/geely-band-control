@@ -28,4 +28,11 @@ public final class ControlPolicyTest {
         assertEquals("", ControlPolicy.liveControlNotice("", true, true, true));
         assertEquals("正在同步银河车况", ControlPolicy.liveControlNotice("正在同步银河车况", false, false, true));
     }
+
+    @Test public void treatsWidgetLoadingAsTransientBlock() {
+        assertTrue(ControlPolicy.isTransientWidgetBlock("loading", "加载中"));
+        assertTrue(ControlPolicy.isTransientWidgetBlock("", "加载中"));
+        assertFalse(ControlPolicy.isTransientWidgetBlock("unknown", "请在手机核对车门锁态"));
+        assertFalse(ControlPolicy.isTransientWidgetBlock("", ""));
+    }
 }

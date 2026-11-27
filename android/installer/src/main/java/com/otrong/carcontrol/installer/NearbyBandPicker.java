@@ -16,6 +16,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -49,6 +50,7 @@ final class NearbyBandPicker {
     private final Map<String, Entry> devices = new HashMap<>();
     private final List<Entry> displayed = new ArrayList<>();
     private final TextView help;
+    private final CheckBox filterXiaomi;
     private final ArrayAdapter<String> rows;
     private final AlertDialog dialog;
     private final Runnable endDiscovery = this::startLeFallback;
@@ -89,6 +91,11 @@ final class NearbyBandPicker {
         panel.setPadding(dp(20), dp(10), dp(20), 0);
         help = new TextView(activity);
         panel.addView(help);
+        filterXiaomi = new CheckBox(activity);
+        filterXiaomi.setText("仅显示小米穿戴设备（防误选）");
+        filterXiaomi.setChecked(true);
+        filterXiaomi.setOnCheckedChangeListener((button, checked) -> render());
+        panel.addView(filterXiaomi);
         ListView list = new ListView(activity);
         rows = new ArrayAdapter<>(activity, android.R.layout.simple_list_item_1);
         list.setAdapter(rows);
@@ -227,7 +234,10 @@ final class NearbyBandPicker {
 
     private void render() {
         displayed.clear();
-        displayed.addAll(devices.values());
+        boolean onlyWearables = filterXiaomi.isChecked();
+        for (Entry entry : devices.values()) {
+            if (!onlyWearables || matchesFilter(entry)) displayed.add(entry);
+        }
         displayed.sort(Comparator.comparingInt(this::rank)
                 .thenComparing(Comparator.comparingInt(Entry::signal).reversed())
                 .thenComparing(Entry::address));
@@ -237,9 +247,14 @@ final class NearbyBandPicker {
         rows.notifyDataSetChanged();
     }
 
+    private boolean matchesFilter(Entry entry) {
+        return entry.address().equals(expectedAddress) || WearableProfile.isLikelyXiaomiWearable(entry.name());
+    }
+
     private int rank(Entry entry) {
         if (entry.address().equals(expectedAddress)) return 0;
-        return WearableProfile.fromBluetoothName(entry.name()) == null ? 2 : 1;
+        if (WearableProfile.fromBluetoothName(entry.name()) != null) return 1;
+        return WearableProfile.isLikelyXiaomiWearable(entry.name()) ? 2 : 3;
     }
 
     @SuppressWarnings("deprecation")

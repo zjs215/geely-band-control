@@ -57,11 +57,19 @@ public class GitHubReleaseTest {
         assertEquals(InstallTarget.BAND_LITE, WearableProfile.fromBluetoothName("小米手环 8 Pro").target);
         assertEquals(InstallTarget.BAND_LITE, WearableProfile.fromBluetoothName("Xiaomi Smart Band 9 Pro C692").target);
         assertEquals(InstallTarget.BAND_LITE, WearableProfile.fromBluetoothName("小米手环 10").target);
-        assertEquals(InstallTarget.BAND, WearableProfile.VELA_WATCH.target);
+        assertEquals(InstallTarget.BAND_LITE, WearableProfile.fromBluetoothName("小米手环 9 NFC").target);
+        assertEquals(InstallTarget.BAND, WearableProfile.fromBluetoothName("Xiaomi Watch S4 Sport").target);
+        assertEquals(InstallTarget.BAND, WearableProfile.fromBluetoothName("REDMI Watch 5").target);
+        assertEquals(InstallTarget.BAND, WearableProfile.fromBluetoothName("小米 Watch S5").target);
+        assertEquals(InstallTarget.BAND, WearableProfile.fromBluetoothName("REDMI Watch 4").target);
         assertEquals(InstallTarget.WATCH, WearableProfile.fromBluetoothName("Xiaomi Watch 5").target);
         assertEquals(InstallTarget.WATCH, WearableProfile.fromBluetoothName("M2501W1").target);
-        assertNull(WearableProfile.fromBluetoothName("REDMI Watch 5"));
-        assertNull(WearableProfile.fromBluetoothName("小米 Watch S5"));
+        assertNull(WearableProfile.fromBluetoothName("小米手环 7"));
+        org.junit.Assert.assertTrue(WearableProfile.isLikelyXiaomiWearable("REDMI Watch 5"));
+        org.junit.Assert.assertTrue(WearableProfile.isLikelyXiaomiWearable("小米 Watch S5"));
+        org.junit.Assert.assertTrue(WearableProfile.isLikelyXiaomiWearable("Xiaomi Smart Band 10 Pro"));
+        org.junit.Assert.assertFalse(WearableProfile.isLikelyXiaomiWearable("AirPods Pro"));
+        org.junit.Assert.assertFalse(WearableProfile.isLikelyXiaomiWearable(""));
     }
 
     @Test

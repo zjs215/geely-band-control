@@ -21,6 +21,7 @@ final class GitHubRelease {
     private static final int MAX_ASSET_BYTES = 24 * 1024 * 1024;
 
     private static final int MAX_NOTES_CHARS = 4000;
+    static final String INSTALLER_ASSET = "wrist-car-control-installer.apk";
 
     record Asset(String tag, String name, String url, int size, String digest) {}
 
@@ -94,7 +95,15 @@ final class GitHubRelease {
         }
 
         Asset asset(InstallTarget target) throws IOException {
-            for (String name : new String[]{target.asset, target.previousAsset}) {
+            return assetByNames(target.asset, target.previousAsset);
+        }
+
+        Asset installerAsset() throws IOException {
+            return assetByNames(INSTALLER_ASSET);
+        }
+
+        private Asset assetByNames(String... names) throws IOException {
+            for (String name : names) {
                 for (int i = 0; i < assets.length(); i++) {
                     JSONObject item = assets.optJSONObject(i);
                     if (item == null || !name.equals(item.optString("name"))) continue;

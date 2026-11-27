@@ -21,4 +21,9 @@ final class ControlPolicy {
         if (requireWearService && !wearServiceRunning) return "请先启动手机端穿戴通信";
         return armed ? "" : "请在手机点击「允许车控」";
     }
+
+    /** Transient widget refresh states ("loading") should not spam passive diagnostic warnings. */
+    static boolean isTransientWidgetBlock(String slotState, String blockedReason) {
+        return "loading".equals(slotState) || "加载中".equals(blockedReason);
+    }
 }

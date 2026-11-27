@@ -31,8 +31,8 @@
     <string name="band_10_pro">小米手环 10 Pro</string>
     <string name="band_8_pro">小米手环 8 Pro</string>
     <string name="band_9_pro">小米手环 9 Pro</string>
-    <string name="straight_band">小米手环 10 / 其他直屏手环</string>
-    <string name="vela_watch">其他 Vela 手表</string>
+    <string name="straight_band">小米手环 9 / 10 / 其他直屏手环</string>
+    <string name="vela_watch">小米 Watch S3/S4 · REDMI Watch 4/5 等 Vela 手表</string>
     <string name="watch_5">小米 Watch 5</string>
     <string name="full_rpk">普通 RPK</string>
     <string name="lite_rpk">Lite RPK</string>
@@ -96,6 +96,12 @@
     <string name="band_log_select_device">已读取日志。请先选择要安装的手环。</string>
     <string name="band_log_no_match">所选手环在日志中没有可匹配的 AuthKey。</string>
     <string name="watch_host">手表无线调试 IP</string>
+    <string name="watch_scan">扫描手表无线调试</string>
+    <string name="watch_scan_idle">同一 Wi-Fi 下打开手表无线调试或配对弹窗，将自动填入 IP 与端口</string>
+    <string name="watch_scan_running">正在扫描局域网内的手表无线调试…</string>
+    <string name="watch_scan_found_pair">已扫描到配对端口 %1$s:%2$d · 请直接输入六位配对码</string>
+    <string name="watch_scan_found_connect">已扫描到连接端口 %1$s:%2$d · 可直接安装或读取版本</string>
+    <string name="watch_scan_failed">暂未启动局域网扫描，可手动填写 IP 与端口后重试</string>
     <string name="watch_pair_port">配对端口</string>
     <string name="watch_pair_code">六位配对码</string>
     <string name="watch_pair">配对手表</string>

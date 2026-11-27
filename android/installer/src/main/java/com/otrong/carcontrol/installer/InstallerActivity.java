@@ -144,6 +144,8 @@ public final class InstallerActivity extends Activity {
     private EditText watchPairPort;
     private EditText watchPairCode;
     private EditText watchConnectPort;
+    private TextView watchScanStatus;
+    private WatchDiscovery watchDiscovery;
     private TextView status;
     private TextView phoneVersion;
     private TextView updateSource;
@@ -153,6 +155,8 @@ public final class InstallerActivity extends Activity {
     private LinearLayout releaseNotesPanel;
     private TextView releaseNotesTitle;
     private TextView releaseNotesBody;
+    private LinearLayout selfUpdatePanel;
+    private TextView selfUpdateText;
     private GitHubRelease.Release latestRelease;
     private boolean checkingRelease;
     private long lastReleaseCheck = -UPDATE_INTERVAL_MS;
@@ -284,6 +288,17 @@ public final class InstallerActivity extends Activity {
         add(heading, updateSource, 5);
         add(content, header, 0);
 
+        selfUpdatePanel = inset();
+        GradientDrawable selfUpdateBackground = rounded(COLOR_INSET, 14);
+        selfUpdateBackground.setStroke(dp(1), COLOR_ACCENT);
+        selfUpdatePanel.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2275dcc2), selfUpdateBackground, null));
+        selfUpdateText = text("", 14, COLOR_ACCENT);
+        selfUpdateText.setTypeface(null, Typeface.BOLD);
+        add(selfUpdatePanel, selfUpdateText, 0);
+        selfUpdatePanel.setOnClickListener(view -> updateInstaller());
+        selfUpdatePanel.setVisibility(View.GONE);
+        add(content, selfUpdatePanel, 12);
+
         targets = new RadioGroup(this);
         targets.setOrientation(RadioGroup.HORIZONTAL);
         targets.setBackground(rounded(COLOR_SURFACE, 15));
@@ -392,7 +407,12 @@ public final class InstallerActivity extends Activity {
         if (packages != null) setStatus("");
         refreshBandButtons();
         refreshUpdates();
-        if (watch) probeWatch(false);
+        if (watch) {
+            if (visible) startWatchDiscovery();
+            probeWatch(false);
+        } else {
+            stopWatchDiscovery();
+        }
     }
 
     private void createWearPicker() {
@@ -563,6 +583,9 @@ public final class InstallerActivity extends Activity {
         add(watchPanel, disclosure(R.string.watch_setup, watchSettings), 4);
         add(watchPanel, watchSettings, 8);
         add(watchSettings, text(getString(R.string.watch_guide), 15, COLOR_SECONDARY), 0);
+        watchScanStatus = text(getString(R.string.watch_scan_idle), 13, COLOR_SECONDARY);
+        add(watchSettings, watchScanStatus, 6);
+        add(watchSettings, button(R.string.watch_scan, false, this::rescanWatch), 8);
         int singleLine = InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS;
         watchIp = input(R.string.watch_host, singleLine);
         watchIp.setText(deviceSettings().getString("watchIp", ""));
@@ -944,16 +967,36 @@ public final class InstallerActivity extends Activity {
     private void pickBand() {
         BluetoothAdapter adapter = bluetooth();
         if (adapter == null) return;
-        List<BluetoothDevice> paired = new ArrayList<>(adapter.getBondedDevices());
-        if (paired.isEmpty()) {
+        List<BluetoothDevice> allPaired = new ArrayList<>(adapter.getBondedDevices());
+        if (allPaired.isEmpty()) {
             setStatus("已配对列表中没有手环。请在手环上打开「连接新手机」，再搜索附近设备。");
             return;
         }
-        paired.sort(Comparator.comparing(InstallerActivity::deviceLabel));
-        String[] names = paired.stream().map(InstallerActivity::deviceLabel).toArray(String[]::new);
+        allPaired.sort(Comparator.comparing(InstallerActivity::deviceLabel));
+        List<BluetoothDevice> filtered = new ArrayList<>();
+        for (BluetoothDevice device : allPaired) {
+            String mac = WearableLog.address(device.getAddress());
+            boolean remembered = !mac.isEmpty() && WearableProfile.known(deviceSettings().getString("bandProfile:" + mac, "")) != null;
+            if (remembered || WearableProfile.isLikelyXiaomiWearable(device.getName())) {
+                filtered.add(device);
+            }
+        }
+        showPairedPicker(filtered.isEmpty() ? allPaired : filtered,
+                !filtered.isEmpty() && filtered.size() < allPaired.size() ? allPaired : null);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void showPairedPicker(List<BluetoothDevice> devices, List<BluetoothDevice> allDevices) {
+        List<String> names = new ArrayList<>();
+        for (BluetoothDevice device : devices) names.add(deviceLabel(device));
+        if (allDevices != null) names.add("显示全部已配对设备…");
         new AlertDialog.Builder(this).setTitle(R.string.band_device)
-                .setItems(names, (dialog, index) -> {
-                    BluetoothDevice device = paired.get(index);
+                .setItems(names.toArray(new String[0]), (dialog, index) -> {
+                    if (allDevices != null && index == devices.size()) {
+                        showPairedPicker(allDevices, null);
+                        return;
+                    }
+                    BluetoothDevice device = devices.get(index);
                     selectWearable(device.getName(), device.getAddress(), false);
                 })
                 .setNegativeButton(android.R.string.cancel, null).show();
@@ -1431,6 +1474,60 @@ public final class InstallerActivity extends Activity {
                 : "系统蓝牙配对未完成。请打开手环的「连接新手机」页面后再试。");
     }
 
+    private void startWatchDiscovery() {
+        if (watchDiscovery == null) {
+            watchDiscovery = new WatchDiscovery(getApplicationContext(), new WatchDiscovery.Listener() {
+                @Override public void onEndpointFound(WatchDiscovery.Endpoint endpoint) {
+                    onWatchEndpointFound(endpoint);
+                }
+
+                @Override public void onDiscoveryFailed() {
+                    if (watchScanStatus != null) {
+                        watchScanStatus.setText(R.string.watch_scan_failed);
+                        watchScanStatus.setTextColor(COLOR_SECONDARY);
+                    }
+                }
+            });
+        }
+        if (watchScanStatus != null) {
+            watchScanStatus.setText(R.string.watch_scan_running);
+            watchScanStatus.setTextColor(COLOR_SECONDARY);
+        }
+        watchDiscovery.start();
+    }
+
+    private void rescanWatch() {
+        if (watchDiscovery == null) {
+            startWatchDiscovery();
+            return;
+        }
+        if (watchScanStatus != null) {
+            watchScanStatus.setText(R.string.watch_scan_running);
+            watchScanStatus.setTextColor(COLOR_SECONDARY);
+        }
+        watchDiscovery.restart();
+    }
+
+    private void stopWatchDiscovery() {
+        if (watchDiscovery != null) watchDiscovery.stop();
+    }
+
+    private void onWatchEndpointFound(WatchDiscovery.Endpoint endpoint) {
+        if (!visible || selectedWearable != WearableProfile.WATCH_5) return;
+        if (!endpoint.ip().equals(value(watchIp).trim())) watchIp.setText(endpoint.ip());
+        String portText = Integer.toString(endpoint.port());
+        if (endpoint.pairing()) {
+            if (!portText.equals(value(watchPairPort).trim())) watchPairPort.setText(portText);
+            watchScanStatus.setText(getString(R.string.watch_scan_found_pair, endpoint.ip(), endpoint.port()));
+            watchScanStatus.setTextColor(COLOR_ACCENT);
+            if (value(watchPairCode).trim().isEmpty()) watchPairCode.requestFocus();
+        } else {
+            if (!portText.equals(value(watchConnectPort).trim())) watchConnectPort.setText(portText);
+            watchScanStatus.setText(getString(R.string.watch_scan_found_connect, endpoint.ip(), endpoint.port()));
+            watchScanStatus.setTextColor(COLOR_ACCENT);
+        }
+    }
+
     private void pairWatch() {
         if (current != null) return;
         try {
@@ -1512,6 +1609,22 @@ public final class InstallerActivity extends Activity {
             }
             operation.report("正在提交给安卓安装程序", -1);
             return new PreparedPhone(PhoneInstall.prepare(this, selected.bytes()), selected.label());
+        }, this::submitPhone, prepared -> PhoneInstall.abandon(this, prepared.id()));
+    }
+
+    private void updateInstaller() {
+        if (current != null || phoneSession >= 0) return;
+        if (!getPackageManager().canRequestPackageInstalls()) {
+            openInstallPermission();
+            return;
+        }
+        runOperation("正在下载安装助手新版", "安装助手更新失败。请检查网络或重试。", 90, false, operation -> {
+            GitHubRelease.Release release = latestRelease != null ? latestRelease : GitHubRelease.latestRelease();
+            GitHubRelease.Asset asset = release.installerAsset();
+            operation.report("正在下载安装助手 " + asset.tag(), -1);
+            byte[] bytes = GitHubRelease.download(asset);
+            operation.report("正在提交给安卓安装程序", -1);
+            return new PreparedPhone(PhoneInstall.prepareSelf(this, bytes), "GitHub 稳定版 " + asset.tag());
         }, this::submitPhone, prepared -> PhoneInstall.abandon(this, prepared.id()));
     }
 
@@ -1730,7 +1843,20 @@ public final class InstallerActivity extends Activity {
         watchHasUpdate = watchResult.comparison() == AppUpdate.Comparison.UPDATE;
         phoneTarget.setText(wearableChoice(R.string.target_phone, phoneHasUpdate));
         wearTarget.setText(wearableChoice(R.string.target_wearable, bandHasUpdate || watchHasUpdate));
+        refreshSelfUpdate();
         refreshReleaseNotes(phoneResult, bandResult, watchResult);
+    }
+
+    private void refreshSelfUpdate() {
+        if (selfUpdatePanel == null || selfUpdateText == null) return;
+        AppUpdate.Installed self = PhoneInstall.selfVersion(this);
+        String next = AppUpdate.availableInstallerVersion(latestRelease, self == null ? "" : self.version());
+        if (next == null || self == null) {
+            selfUpdatePanel.setVisibility(View.GONE);
+            return;
+        }
+        selfUpdateText.setText("发现安装助手新版 v" + next + "（当前 " + self.label() + "）· 点此更新");
+        selfUpdatePanel.setVisibility(View.VISIBLE);
     }
 
     private void refreshReleaseNotes(AppUpdate phoneResult, AppUpdate bandResult, AppUpdate watchResult) {
@@ -1940,12 +2066,17 @@ public final class InstallerActivity extends Activity {
         visible = true;
         refreshPhoneVersion();
         checkForUpdates();
+        if (targets.getCheckedRadioButtonId() == wearTarget.getId()
+                && selectedWearable == WearableProfile.WATCH_5) {
+            startWatchDiscovery();
+        }
         probeWatch(false);
     }
 
     @Override
     protected void onStop() {
         visible = false;
+        stopWatchDiscovery();
         if (bandSession != null) bandSession.trace.event("session.activity_stopped");
         closeBandSession();
         if (nearbyBandPicker != null) {
@@ -1957,6 +2088,7 @@ public final class InstallerActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        stopWatchDiscovery();
         unregisterReceiver(phoneInstallResults);
         unregisterReceiver(bandLinkEvents);
         closeBandSession();

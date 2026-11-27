@@ -8,10 +8,16 @@ import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.view.InputDevice;
+import android.view.MotionEvent;
+import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.widget.AbsListView;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 public final class ThemeDialogs {
@@ -82,6 +88,56 @@ public final class ThemeDialogs {
         styleAction(dialog.getButton(AlertDialog.BUTTON_POSITIVE), true, false);
         styleAction(dialog.getButton(AlertDialog.BUTTON_NEGATIVE), false, false);
         styleAction(dialog.getButton(AlertDialog.BUTTON_NEUTRAL), false, true);
+        bindRotaryScroll(dialog, list);
+    }
+
+    public static void bindRotaryScroll(AlertDialog dialog, View scrollTarget) {
+        if (dialog == null || dialog.getWindow() == null) return;
+        View target = scrollTarget != null ? scrollTarget : dialog.getListView();
+        if (target == null) {
+            target = findScrollableView(dialog.findViewById(android.R.id.content));
+        }
+        if (target == null) return;
+        View scrollable = target;
+        scrollable.setFocusable(true);
+        scrollable.setFocusableInTouchMode(true);
+        scrollable.requestFocus();
+        scrollable.post(scrollable::requestFocus);
+        dialog.getWindow().getDecorView().setOnGenericMotionListener((view, event) -> {
+            if (event == null || event.getAction() != MotionEvent.ACTION_SCROLL) return false;
+            if (!event.isFromSource(InputDevice.SOURCE_ROTARY_ENCODER)
+                    && !event.isFromSource(InputDevice.SOURCE_CLASS_POINTER)) {
+                return false;
+            }
+            float scroll = event.getAxisValue(MotionEvent.AXIS_SCROLL);
+            if (scroll == 0f) scroll = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+            if (scroll == 0f) return false;
+            float factor = ViewConfiguration.get(view.getContext()).getScaledVerticalScrollFactor();
+            if (factor <= 0f) factor = 48f * view.getResources().getDisplayMetrics().density;
+            int deltaY = Math.round(-scroll * factor);
+            if (deltaY == 0) return true;
+            if (scrollable instanceof AbsListView listView) {
+                listView.scrollListBy(deltaY);
+                return true;
+            }
+            if (scrollable instanceof ScrollView scrollView) {
+                scrollView.scrollBy(0, deltaY);
+                return true;
+            }
+            return false;
+        });
+    }
+
+    private static View findScrollableView(View root) {
+        if (root == null) return null;
+        if (root instanceof AbsListView || root instanceof ScrollView) return root;
+        if (root instanceof ViewGroup group) {
+            for (int i = 0; i < group.getChildCount(); i++) {
+                View found = findScrollableView(group.getChildAt(i));
+                if (found != null) return found;
+            }
+        }
+        return null;
     }
 
     public void styleInput(EditText input) {

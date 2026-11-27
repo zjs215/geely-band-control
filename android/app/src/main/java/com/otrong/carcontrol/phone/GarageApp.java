@@ -357,28 +357,33 @@ public final class GarageApp extends Application {
         if (widgets != null) {
             Map<CarAction, GalaxyWidgets.Control> current = widgets.controls();
             GalaxyWidgets.Control lock = current.get(CarAction.LOCK);
-            String block = isArmed() && lock != null ? lock.blockedReason() : "";
-            if (!block.equals(observedBlock)) {
-                observedBlock = block;
-                if (!block.isEmpty()) appendEvent("车锁暂不可用", block + " · 卡片状态「"
-                        + widgets.vehicle().motion() + "」", true);
-            }
+            String block = isArmed() && lock != null && !isTransientBlock(lock) ? lock.blockedReason() : "";
+            observedBlock = recordObservedBlock("车锁暂不可用", block, observedBlock);
+
             String windowBlock = "";
             if (isArmed()) {
                 for (Map.Entry<CarAction, GalaxyWidgets.Control> entry : current.entrySet()) {
-                    if (entry.getKey().isWindow() && !entry.getValue().blockedReason().isEmpty()) {
-                        windowBlock = entry.getKey().label + ": " + entry.getValue().blockedReason();
+                    GalaxyWidgets.Control item = entry.getValue();
+                    if (entry.getKey().isWindow() && !item.blockedReason().isEmpty() && !isTransientBlock(item)) {
+                        windowBlock = entry.getKey().label + ": " + item.blockedReason();
                         break;
                     }
                 }
             }
-            if (!windowBlock.equals(observedWindowBlock)) {
-                observedWindowBlock = windowBlock;
-                if (!windowBlock.isEmpty()) appendEvent("车窗暂不可用", windowBlock + " · 卡片状态「"
-                        + widgets.vehicle().motion() + "」", true);
-            }
+            observedWindowBlock = recordObservedBlock("车窗暂不可用", windowBlock, observedWindowBlock);
         }
         if (observer != null) observer.run();
+    }
+
+    private static boolean isTransientBlock(GalaxyWidgets.Control control) {
+        return ControlPolicy.isTransientWidgetBlock(control.slotState(), control.blockedReason());
+    }
+
+    private String recordObservedBlock(String title, String block, String previous) {
+        if (!block.equals(previous) && !block.isEmpty()) {
+            appendEvent(title, block + " · 车辆状态「" + widgets.vehicle().motion() + "」", true);
+        }
+        return block;
     }
 
     private void onWidgetChange(int id) {
@@ -535,7 +540,7 @@ public final class GarageApp extends Application {
         String blocked = wearBlockedReason(control);
         if (!blocked.isEmpty()) {
             if (request.action() == CarAction.LOCK) {
-                appendEvent("车锁准备被拦截", blocked + " · 卡片状态「" + widgets.vehicle().motion() + "」", true);
+                appendEvent("车锁准备被拦截", blocked + " · 车辆状态「" + widgets.vehicle().motion() + "」", true);
             }
             reply(node, request, "blocked", blocked);
             return;
@@ -588,7 +593,7 @@ public final class GarageApp extends Application {
     private DispatchResult dispatchControl(CarAction action, GalaxyWidgets.Target target, boolean fromVoice,
                                            LynkConfirmation expected) {
         if (action == CarAction.LOCK) {
-            appendEvent("准备" + target.title(), "卡片状态「" + widgets.vehicle().motion()
+            appendEvent("准备" + target.title(), "车辆状态「" + widgets.vehicle().motion()
                     + "」 · 锁态「" + target.lockState() + "」", false);
         }
         LynkApproval approval = null;

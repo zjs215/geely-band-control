@@ -40,4 +40,17 @@ record AppUpdate(String available, boolean online, Comparison comparison) {
         return new AppUpdate(available, true, GitHubRelease.compareVersions(available, installedName) > 0
                 ? Comparison.UPDATE : Comparison.CURRENT);
     }
+
+    static String availableInstallerVersion(GitHubRelease.Release release, String currentVersion) {
+        if (release == null || currentVersion == null
+                || !currentVersion.matches("[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}")) {
+            return null;
+        }
+        try {
+            String remote = release.installerAsset().tag().substring(1);
+            return GitHubRelease.compareVersions(remote, currentVersion) > 0 ? remote : null;
+        } catch (IOException unavailable) {
+            return null;
+        }
+    }
 }
