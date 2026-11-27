@@ -13,21 +13,21 @@ Android 手机应用「**口袋车控**」可读取**吉利银河、吉利汽车
 
 项目原创代码和自绘素材采用 [Apache-2.0](LICENSE)。通信 SDK 和主题素材的来源见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-## v0.3.6 下载
+## v0.3.7 下载
 
-手机端为「口袋车控」，手环和手表端为「腕上车控」。各端与安装助手统一为 **0.3.6**（`versionCode` 56）。使用同签名的安装包覆盖旧版可沿用应用数据。
+手机端为「口袋车控」，手环和手表端为「腕上车控」。各端与安装助手统一为 **0.3.7**（`versionCode` 57）。使用同签名的安装包覆盖旧版可沿用应用数据。
 
 | 设备 | 安装包 |
 | --- | --- |
-| Android 手机 | [口袋车控 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.6/pocket-car-control.apk) |
-| 小米手环 10 Pro、支持 Vela RPK 的圆形手表 | [腕上车控完整版 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.6/wrist-car-control.rpk) |
-| 小米手环 9 Pro / 8 Pro、手环 10 | [腕上车控 Lite RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.6/wrist-car-control-lite.rpk) |
-| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.6/wrist-car-control-watch.apk) |
-| Android 安装助手（内置手机与穿戴安装包） | [安装助手 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.6/wrist-car-control-installer.apk) |
+| Android 手机 | [口袋车控 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.7/pocket-car-control.apk) |
+| 小米手环 10 Pro、支持 Vela RPK 的圆形手表 | [腕上车控完整版 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.7/wrist-car-control.rpk) |
+| 小米手环 9 Pro / 8 Pro、手环 10 | [腕上车控 Lite RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.7/wrist-car-control-lite.rpk) |
+| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.7/wrist-car-control-watch.apk) |
+| Android 安装助手（内置手机与穿戴安装包） | [安装助手 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.7/wrist-car-control-installer.apk) |
 
-[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.3.6) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.3.6/SHA256SUMS.txt)
+[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.3.7) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.3.7/SHA256SUMS.txt)
 
-[车控安装助手](docs/wear-installer.md)（朱砂红图标）打开时自动检查 GitHub 最新稳定版并校验 SHA-256（有可用在线更新时可直接查看版本更新内容），也可用内置包离线安装手机 APK、Vela 完整版/Lite RPK 和 Watch 5 APK，支持手环蓝牙直装（含小米手环 10 Pro 空闲会话保活与重新配对恢复）及 Watch 5 无线 ADB 安装。手机端从首页调色盘打开「手机主题 → 桌面图标」，Watch 5 从「设置 → 桌面图标」切换四套图标；Vela 可按图标风格安装 `vela-icon-variants.zip` 中对应的完整版或 Lite RPK。
+[车控安装助手](docs/wear-installer.md)（朱砂红图标）可检查最新稳定版并校验 SHA-256，也可用内置包离线安装手机 APK、Vela 完整版/Lite RPK 和 Watch 5 APK。Vela 新建蓝牙安装连接时会重新配对，Watch 5 可通过无线 ADB 安装。手机端从首页调色盘打开「手机主题 → 桌面图标」，Watch 5 从「设置 → 桌面图标」切换四套图标。Vela 可选图标包可按[构建说明](docs/development.md)生成。
 
 ## 安装与首次验证
 
@@ -55,7 +55,7 @@ Android 手机应用「**口袋车控**」可读取**吉利银河、吉利汽车
 3. 小组件提供总续航、纯电续航（或电量百分比）、燃油续航、驻车/充电状态和更新时间。当官方卡片仅显示电量百分比而不显示公里数时，穿戴端会自动按百分比同步展示；同一分钟的回传会保留原时间。银河与领克卡片上的未知按钮可在手机预览区直接点按标记。
 4. 核对车况和按钮后，在「车控授权」里点「允许车控」。收到「指令已发送」回执后，以官方车况核对执行结果。若穿戴端提示「请在手机确认官方操作」，从「口袋车控」或同名通知打开「处理官方确认」。
 
-从 0.3.6 起，在「车控授权 → 二次确认设置」中选择已识别的动作，可分别设置「手环和手表二次确认」与「米家语音二次确认」。默认穿戴端需要确认，米家语音直接执行。手机和穿戴端都升级到 0.3.6 后，关闭穿戴确认即可单击执行。启用语音确认后，在手机通知或「车控授权」中点「确认执行」，请求 30 秒后失效。设置按品牌和动作保存。官方卡片要求的确认仍按原流程处理。
+从 0.3.6 起，在「车控授权 → 二次确认设置」中选择已识别的动作，可分别设置「手环和手表二次确认」与「米家语音二次确认」。默认穿戴端需要确认，米家语音直接执行。手机和穿戴端都使用 0.3.6 或更新版本时，关闭穿戴确认即可单击执行。启用语音确认后，在手机通知或「车控授权」中点「确认执行」，请求 30 秒后失效。设置按品牌和动作保存。官方卡片要求的确认仍按原流程处理。
 
 点手机首页车辆名称或旁边的铅笔图标即可修改名称（最多 10 个字符，默认「我的座驾」）并同步到穿戴端。
 
