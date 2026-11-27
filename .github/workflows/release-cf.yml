@@ -1,9 +1,8 @@
 name: Release to Cloudflare Pages
 
 on:
-  push:
-    tags:
-      - 'v*'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -12,30 +11,34 @@ permissions:
 jobs:
   publish:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: '17'
-      - uses: setup-node@v4
+          ref: ${{ github.event.release.tag_name || github.ref }}
+      - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: band/package-lock.json
-      - uses: android-actions/setup-android@v3
-        with:
-          packages: platform-tools
-          log-accepted-android-sdk-licenses: false
-      - name: Install Android platform
+      - name: Download published release assets
         shell: pwsh
-        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
-      - name: Build release packages and installer
-        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
-          ./scripts/build.ps1
-          ./scripts/build-installer.ps1
+          $version = (Get-Content band/src/manifest.json -Raw | ConvertFrom-Json).versionName
+          $tag = "v$version"
+          if ($env:RELEASE_TAG -and $env:RELEASE_TAG -ne $tag) { throw 'Release tag does not match manifest version.' }
+          $dir = "artifacts/$tag"
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          gh release download $tag --repo $env:GITHUB_REPOSITORY --dir $dir
+          if ($LASTEXITCODE -ne 0) { throw 'Release asset download failed.' }
+          Push-Location $dir
+          try {
+            foreach ($line in Get-Content SHA256SUMS.txt) {
+              if ($line -notmatch '^([a-fA-F0-9]{64})\s+(\S+)$') { throw 'Invalid checksum line.' }
+              if ((Get-FileHash -LiteralPath $Matches[2] -Algorithm SHA256).Hash -ne $Matches[1]) { throw 'Release asset checksum mismatch.' }
+            }
+          } finally { Pop-Location }
           ./scripts/publish-cf-pages.ps1
       - name: Deploy to Cloudflare Pages
         shell: pwsh

@@ -13,19 +13,19 @@ Android 手机应用「**口袋车控**」可读取**吉利银河、吉利汽车
 
 项目原创代码和自绘素材采用 [Apache-2.0](LICENSE)。通信 SDK 和主题素材的来源见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-## v0.3.2 下载
+## v0.3.5 下载
 
-手机端为「口袋车控」，手环和手表端为「腕上车控」。各端与安装助手统一为 **0.3.2**（`versionCode` 52）。使用同签名的安装包覆盖旧版可沿用应用数据。
+手机端为「口袋车控」，手环和手表端为「腕上车控」。各端与安装助手统一为 **0.3.5**（`versionCode` 55）。使用同签名的安装包覆盖旧版可沿用应用数据。
 
 | 设备 | 安装包 |
 | --- | --- |
-| Android 手机 | [口袋车控 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/pocket-car-control.apk) |
-| 小米手环 10 Pro、支持 Vela RPK 的圆形手表 | [腕上车控完整版 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/wrist-car-control.rpk) |
-| 小米手环 9 Pro / 8 Pro、手环 10 | [腕上车控 Lite RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/wrist-car-control-lite.rpk) |
-| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/wrist-car-control-watch.apk) |
-| Android 安装助手（内置手机与穿戴安装包） | [安装助手 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/wrist-car-control-installer.apk) |
+| Android 手机 | [口袋车控 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.5/pocket-car-control.apk) |
+| 小米手环 10 Pro、支持 Vela RPK 的圆形手表 | [腕上车控完整版 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.5/wrist-car-control.rpk) |
+| 小米手环 9 Pro / 8 Pro、手环 10 | [腕上车控 Lite RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.5/wrist-car-control-lite.rpk) |
+| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.5/wrist-car-control-watch.apk) |
+| Android 安装助手（内置手机与穿戴安装包） | [安装助手 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.3.5/wrist-car-control-installer.apk) |
 
-[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.3.2) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/SHA256SUMS.txt) · [Vela 可选图标包](https://github.com/zjs215/geely-band-control/releases/download/v0.3.2/vela-icon-variants.zip)
+[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.3.5) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.3.5/SHA256SUMS.txt)
 
 [车控安装助手](docs/wear-installer.md)（朱砂红图标）打开时自动检查 GitHub 最新稳定版并校验 SHA-256（有可用在线更新时可直接查看版本更新内容），也可用内置包离线安装手机 APK、Vela 完整版/Lite RPK 和 Watch 5 APK，支持手环蓝牙直装（含小米手环 10 Pro 空闲会话保活与重新配对恢复）及 Watch 5 无线 ADB 安装。手机端从首页调色盘打开「手机主题 → 桌面图标」，Watch 5 从「设置 → 桌面图标」切换四套图标；Vela 可按图标风格安装 `vela-icon-variants.zip` 中对应的完整版或 Lite RPK。
 

@@ -35,9 +35,9 @@ final class GitHubRelease {
 
     static Release latestRelease() throws IOException {
         try {
-            return parse(new String(get(MIRROR_LATEST, 512 * 1024, METADATA_TIMEOUT_SECONDS), StandardCharsets.UTF_8));
-        } catch (IOException mirrorUnavailable) {
             return parse(new String(get(LATEST, 512 * 1024, METADATA_TIMEOUT_SECONDS), StandardCharsets.UTF_8));
+        } catch (IOException githubUnavailable) {
+            return parse(new String(get(MIRROR_LATEST, 512 * 1024, METADATA_TIMEOUT_SECONDS), StandardCharsets.UTF_8));
         }
     }
 
