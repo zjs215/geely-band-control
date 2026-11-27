@@ -1345,7 +1345,6 @@ export default createGaragePage({ lite: true })
   background-color: #dbe8f0;
   border-color: #a7becc;
   color: #152c3c;
-  selected-color: #126052;
 }
 .theme-stage-day {
   background-color: #e7eff4;

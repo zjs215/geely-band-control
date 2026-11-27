@@ -4,6 +4,26 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public final class BrandConfigTest {
+    @Test public void zeekrHasIndependentBindingAndAnOrderedDynamicSlotCatalog() {
+        BrandConfig zeekr = BrandConfig.fromId("ZEEKR");
+        assertSame(BrandConfig.ZEEKR, zeekr);
+        assertEquals("com.zeekrlife.mobile", zeekr.packageName);
+        assertEquals("com.zeekrlife.vehicle.smallwidget.widgetprovider.ZeekrWidget", zeekr.provider);
+        assertEquals(BrandConfig.SlotMode.DYNAMIC, zeekr.slotMode);
+        assertEquals(java.util.List.of("ll_car_control_1", "ll_car_control_2", "ll_car_control_3", "ll_car_control_4"),
+                zeekr.slots);
+        assertEquals("iv_car_control_loading_4", zeekr.slot("ll_car_control_4").progress());
+        for (BrandConfig other : BrandConfig.OPTIONS) {
+            if (other == zeekr) continue;
+            assertNotEquals(other.hostId, zeekr.hostId);
+            assertNotEquals(other.cardsKey, zeekr.cardsKey);
+            assertNotEquals(other.namespace, zeekr.namespace);
+        }
+        assertTrue(zeekr.recognizedIconsOnly());
+        assertEquals(MiHomeVoice.Command.TEST, MiHomeVoice.match(zeekr.namespace, "ZEEKR_V1:TEST", null, null).command());
+        assertNull(MiHomeVoice.match(zeekr.namespace, "ZEEKR_V1:LOCK", null, null));
+    }
+
     @Test public void geelyUsesItsOwnProviderAndStorage() {
         BrandConfig geely = BrandConfig.fromId("GEELY");
         assertSame(BrandConfig.GEELY, geely);

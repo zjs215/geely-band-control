@@ -318,7 +318,8 @@ class GalaxyWidgets {
     }
 
     boolean showsSetup(Card card) {
-        return cards.get(card.id) == card && card.view.layout.equals(config.setupLayout);
+        return cards.get(card.id) == card && (card.view.layout.equals(config.setupLayout)
+                || hasNormalLayout(card) && tree.showsZeekrGuest(card.view));
     }
 
     boolean showsUnavailable(Card card) {
@@ -349,7 +350,7 @@ class GalaxyWidgets {
                 break;
             }
         }
-        if (current == null || !current.role().isEmpty() || current.match() != null || config == BrandConfig.GEELY) return false;
+        if (current == null || !current.role().isEmpty() || current.match() != null || config.recognizedIconsOnly()) return false;
         String fingerprint = current.fingerprint();
         card.bindings.removeIf(binding -> binding.slot.equals(original.slot())
                 && (action.isEmpty() || binding.fingerprint.equals(fingerprint) || !binding.action.equals(action)));
@@ -375,7 +376,8 @@ class GalaxyWidgets {
 
     CarImage.Packaged carImage() {
         Card card = primary();
-        if (card == null || !hasNormalLayout(card) || tree.loading(card.view)) return null;
+        if (card == null || !hasNormalLayout(card) || tree.loading(card.view)
+                || config == BrandConfig.ZEEKR && !card.validReading) return null;
         if (card.carImageRevision != card.view.revision) {
             layoutForScan(card);
             var view = tree.vehicleImage(card.view);
@@ -445,7 +447,7 @@ class GalaxyWidgets {
     }
 
     private void recordReading(Card card) {
-        if (showsUnavailable(card) || config == BrandConfig.GEELY && showsSetup(card)) {
+        if (showsUnavailable(card) || config.recognizedIconsOnly() && showsSetup(card)) {
             card.latest = VehicleStatus.EMPTY;
             card.validReading = false;
             card.lastMapped = Map.of();

@@ -63,6 +63,7 @@ final class MiHomeVoice {
     }
 
     static boolean enabled(String namespace, Command command) {
+        if ("ZEEKR_V1".equals(namespace)) return command == Command.TEST;
         if ("GEELY_V1".equals(namespace)) return switch (command) {
             case TEST, LOCK, UNLOCK, CLIMATE, FIND -> true;
             default -> false;

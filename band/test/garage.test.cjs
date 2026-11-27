@@ -1259,6 +1259,28 @@ test('Geely has its own vehicle cache and presents its official confirmation', (
   assert.equal(link.sent.at(-1).data.brand, 'GEELY')
 })
 
+test('Zeekr switches brand and requires confirmation before targeting its current slot', () => {
+  const link = start()
+  link.hello()
+  link.reply({ vehicle: { totalKm: 600, updatedAt: 1700000000000 }, mapped: ['lock'], available: ['lock'] })
+  link.page.carImageHash = 'old-vehicle'
+  link.page.syncStatus()
+  const state = { brand: 'ZEEKR', mapped: ['find', 'climate'], available: ['find'], armed: true }
+  link.reply(state)
+  assert.equal(link.page.brand, 'ZEEKR')
+  assert.equal(link.page.carImageHash, '')
+  assert.equal(link.page.carImageSrc, '')
+  assert.match(link.page.emptyLabel, /极氪/)
+  link.page.select('find')
+  assert.equal(link.sent.at(-1).data.type, 'prepare')
+  assert.equal(link.sent.at(-1).data.brand, 'ZEEKR')
+  link.reply({ ...state, status: 'confirm', action: 'find', token: 'z'.repeat(36), message: '寻车' })
+  assert.equal(link.page.confirmTitle, '寻车')
+  link.page.execute()
+  assert.equal(link.sent.at(-1).data.type, 'execute')
+  assert.equal(link.sent.at(-1).data.token, 'z'.repeat(36))
+})
+
 
 test('Lynk voice routes only lock and window through prepare and wearable confirmation', () => {
   for (const action of ['lynk_unlock', 'lynk_window']) {

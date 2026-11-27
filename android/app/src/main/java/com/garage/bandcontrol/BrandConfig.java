@@ -6,12 +6,13 @@ import java.util.stream.Collectors;
 
 /** Resource and host identities for the supported official widgets. */
 final class BrandConfig {
-    enum Brand { GALAXY, LYNKCO, GEELY }
+    enum Brand { GALAXY, LYNKCO, GEELY, ZEEKR }
     enum SlotMode { DYNAMIC, CONFIGURABLE }
     static final BrandConfig GALAXY = new BrandConfig(Brand.GALAXY);
     static final BrandConfig LYNKCO = new BrandConfig(Brand.LYNKCO);
     static final BrandConfig GEELY = new BrandConfig(Brand.GEELY);
-    static final List<BrandConfig> OPTIONS = List.of(GALAXY, LYNKCO, GEELY);
+    static final BrandConfig ZEEKR = new BrandConfig(Brand.ZEEKR);
+    static final List<BrandConfig> OPTIONS = List.of(GALAXY, LYNKCO, GEELY, ZEEKR);
     final Brand brand;
     final String name;
     final String appName;
@@ -51,6 +52,50 @@ final class BrandConfig {
     final String namespace;
     private BrandConfig(Brand brand) {
         this.brand = brand;
+        if (brand == Brand.ZEEKR) {
+            name = "极氪";
+            appName = name;
+            slotMode = SlotMode.DYNAMIC;
+            heightDp = 175;
+            hostId = 0x5a4b;
+            cardsKey = "zeekrWidgetCards";
+            slotModels = List.of(new Slot("ll_car_control_1", "iv_car_control_1_icon", "iv_car_control_loading_1"),
+                    new Slot("ll_car_control_2", "iv_car_control_2_icon", "iv_car_control_loading_2"),
+                    new Slot("ll_car_control_3", "iv_car_control_3_icon", "iv_car_control_loading_3"),
+                    new Slot("ll_car_control_4", "iv_car_control_4_icon", "iv_car_control_loading_4"));
+            slots = Collections.unmodifiableList(slotModels.stream().map(Slot::container).collect(Collectors.toList()));
+            energyBars = List.of();
+            loading = List.of("pb_refreshing");
+            packageName = "com.zeekrlife.mobile";
+            provider = "com.zeekrlife.vehicle.smallwidget.widgetprovider.ZeekrWidget";
+            normalLayout = "vehicle_widget_layout";
+            setupLayout = null; // Guest and owner states share the normal layout.
+            unavailableLayout = null;
+            settings = "ll_widget_setting";
+            refresh = "ll_refresh";
+            refreshViews = List.of(refresh, "iv_refresh", "tv_update_time");
+            confirm = null;
+            accept = null;
+            cancel = null;
+            confirmTitle = null;
+            mileage = "rl_car_owner";
+            mileageValue = "tv_cruising_range";
+            mileageUnit = "tv_cruising_range_unit";
+            electric = "tv_charge_endurance";
+            electricBar = null;
+            oil = "tv_oil_endurance";
+            oilBar = null;
+            alarm = "ll_charge";
+            motion = "iv_widget_charge_text";
+            time = "tv_update_time";
+            energyValue = null;
+            energyUnit = null;
+            slotLoading = null;
+            slotIcon = null;
+            iconPrefix = "widget_car_control_";
+            namespace = "ZEEKR_V1";
+            return;
+        }
         boolean lynk = brand == Brand.LYNKCO;
         boolean geely = brand == Brand.GEELY;
         name = lynk ? "领克" : geely ? "吉利汽车" : "银河";
@@ -74,6 +119,7 @@ final class BrandConfig {
             case LYNKCO -> "com.lynkco.vehicle.widget.ListWidgetProvider";
             case GEELY -> "com.geely.consumer.carcontrol.widget.appwidget.Wg_Middle";
             case GALAXY -> "com.geely.galaxy.car.weight.appwidget.WgProviderMiddle";
+            case ZEEKR -> throw new AssertionError(brand);
         };
         normalLayout = lynk ? "layout_widget" : "wg_middle_normal";
         setupLayout = lynk ? null : geely ? "wg_middle_unbound" : "wg_middle_init";
@@ -103,6 +149,8 @@ final class BrandConfig {
         iconPrefix = lynk ? null : geely ? "wg_" : "car_wg_funicon_";
         namespace = lynk ? "LYNKCO_V1" : geely ? "GEELY_V1" : "GARAGE_V1";
     }
+    boolean recognizedIconsOnly() { return this == GEELY || this == ZEEKR; }
+
     Slot slot(String container) { return slotModels.stream().filter(slot -> slot.container().equals(container)).findFirst().orElse(null); }
     static BrandConfig fromId(String id) {
         return OPTIONS.stream().filter(config -> config.brand.name().equals(id)).findFirst().orElse(GALAXY);

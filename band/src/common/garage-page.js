@@ -279,7 +279,7 @@ export function createGaragePage(options = {}) {
     watchHomeUi: watchHomeClasses('standard', INITIAL_LAYOUT),
     watchControlsUi: watchControlsClasses(INITIAL_LAYOUT),
     watchPage: 0,
-    homeLayoutReady: false,
+    homeLayoutReady: LITE,
     controlsPullText: '',
     controlsPullOffset: 0,
     controlsPullProgress: 0,
@@ -489,7 +489,7 @@ export function createGaragePage(options = {}) {
     this.layoutDetected = false
     this.layoutResolved = false
     this.shortRect = false
-    this.layoutReadyTimer = setTimeout(() => {
+    this.layoutReadyTimer = LITE ? null : setTimeout(() => {
       this.homeLayoutReady = true
       this.scheduleFocusActive()
     }, 450)
@@ -591,12 +591,12 @@ export function createGaragePage(options = {}) {
       return
     }
     if ((this.snapshotChecked || this.hasReply) && this.carImageChecked && !this.carImageSrc) {
-      this.carImageSrc = this.brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+      this.carImageSrc = this.defaultCarImage()
     }
   },
 
   onCarImageError() {
-    const fallback = this.brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+    const fallback = this.defaultCarImage()
     if (!this.carImageSrc || this.carImageSrc === fallback) return
     if (this.carImageFromCache) {
       // A missing cache file can be recovered from the next status reply, even if its hash has not changed.
@@ -632,6 +632,7 @@ export function createGaragePage(options = {}) {
     if (this.layoutProfile === next) {
       if (!LITE && this.isCircularProfile() && !this.circleTwoPageLoaded) this.loadCircleTwoPageSetting()
       else if (this.canSyncBandDisplay() && !this.rectTwoPageLoaded) this.loadRectTwoPageSetting()
+      if (LITE) this.updateRows()
       return
     }
     this.layoutProfile = next
@@ -682,9 +683,9 @@ export function createGaragePage(options = {}) {
   scheduleFocusActive() {
     if (!this.visible || this.destroyed) return
     const targetId = this.confirmTitle ? ''
-      : this.settingsOpen ? (this.themeEditorOpen ? 'themeEditorScroll' : 'settingsScroll')
+      : !LITE && this.settingsOpen ? (this.themeEditorOpen ? 'themeEditorScroll' : 'settingsScroll')
         : !this.homeLayoutReady ? ''
-          : this.isTwoPageShell() ? 'watchSwiper' : this.isCircularProfile() ? 'circleSingleShell' : 'homeScroll'
+          : this.isTwoPageShell() ? 'watchSwiper' : (!LITE && this.isCircularProfile() ? 'circleSingleShell' : (LITE ? '' : 'homeScroll'))
     clearTimeout(this.focusTimer)
     this.focusTimer = null
     if (!targetId) return
@@ -1691,11 +1692,16 @@ export function createGaragePage(options = {}) {
   },
 
   normalizeBrand(value) {
-    return value === 'LYNKCO' || value === 'GEELY' ? value : 'GALAXY'
+    return value === 'LYNKCO' || value === 'GEELY' || value === 'ZEEKR' ? value : 'GALAXY'
   },
 
   brandName() {
+    if (this.brand === 'ZEEKR') return '极氪'
     return this.brand === 'LYNKCO' ? '领克' : this.brand === 'GEELY' ? '吉利汽车' : '银河'
+  },
+
+  defaultCarImage() {
+    return this.brand === 'LYNKCO' || this.brand === 'ZEEKR' ? '' : DEFAULT_CAR_IMAGE
   },
 
   applyBrand(value) {
@@ -1713,7 +1719,7 @@ export function createGaragePage(options = {}) {
     this.controlStates = {}
     this.imageSync = null
     this.carImageHash = ''
-    this.carImageSrc = brand === 'LYNKCO' ? '' : DEFAULT_CAR_IMAGE
+    this.carImageSrc = this.defaultCarImage()
     this.controlIconHashes = {}
     this.controlIconUris = {}
     this.failedControlIconHashes = {}
