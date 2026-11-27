@@ -82,7 +82,13 @@ final class BandWire implements AutoCloseable {
                 }
                 if (frame.type() == DATA && !frame.fast()) write(encode(ACK, frame.sequence(), EMPTY));
                 synchronized (incoming) {
-                    if (collecting && !incoming.offer(frame)) throw new IOException("Too many Bluetooth replies");
+                    if (!collecting) {
+                        if (frame.type() == DATA) {
+                            trace.event("wire.idle_data", "seq", frame.sequence(), "bytes", frame.payload().length);
+                        }
+                    } else if (!incoming.offer(frame)) {
+                        throw new IOException("Too many Bluetooth replies");
+                    }
                 }
             }
         } catch (IOException error) {

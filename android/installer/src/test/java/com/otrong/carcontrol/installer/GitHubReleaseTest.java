@@ -27,6 +27,17 @@ public class GitHubReleaseTest {
     }
 
     @Test
+    public void parsesAndFormatsReleaseNotesForDisplay() throws Exception {
+        String json = new JSONObject(release(asset("pocket-car-control.apk")))
+                .put("name", "v0.3.2 更新")
+                .put("body", "### 本次更新\r\n- 修复 **连接** 与 `RPK` 传包\r\n\r\n* 新增 [说明](https://example.org)\r\n")
+                .toString();
+        GitHubRelease.Release parsed = GitHubRelease.parse(json);
+        assertEquals("v0.3.2 更新", parsed.name());
+        assertEquals("本次更新\n• 修复 连接 与 RPK 传包\n\n• 新增 说明", parsed.body());
+    }
+
+    @Test
     public void rejectsLiteAndArtifactsWithoutAnOfficialUrlAndDigest() throws Exception {
         assertThrows(IOException.class, () -> GitHubRelease.select(release(
                 asset("wrist-car-control-lite.rpk"), asset("pocket-car-control.apk")), InstallTarget.BAND));

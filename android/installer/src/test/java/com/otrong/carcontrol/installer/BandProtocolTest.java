@@ -97,6 +97,16 @@ public class BandProtocolTest {
     }
 
     @Test(timeout = 10000)
+    public void installsOnTheSameSessionAfterAnIdleProbe() throws Exception {
+        assertEquals(BandProtocol.Result.CONFIRMED, exchange(0, false, false, IdleProbe.REPLY));
+    }
+
+    @Test(timeout = 10000)
+    public void installsWhenTheIdleProbeTimesOutButTheLinkStaysOpen() throws Exception {
+        assertEquals(BandProtocol.Result.CONFIRMED, exchange(0, false, false, IdleProbe.NO_REPLY));
+    }
+
+    @Test(timeout = 10000)
     public void readsInstalledAppAfterExplicitWearableRejection() throws Exception {
         BandProtocol.InstallRejected result = assertThrows(BandProtocol.InstallRejected.class,
                 () -> exchange(1, false, false));
@@ -115,6 +125,13 @@ public class BandProtocolTest {
 
     private static BandProtocol.Result exchange(int receiptCode, boolean rejectOnePart, boolean emptyConfirmation)
             throws Exception {
+        return exchange(receiptCode, rejectOnePart, emptyConfirmation, IdleProbe.NONE);
+    }
+
+    private enum IdleProbe { NONE, REPLY, NO_REPLY }
+
+    private static BandProtocol.Result exchange(int receiptCode, boolean rejectOnePart, boolean emptyConfirmation,
+                                                IdleProbe idleProbe) throws Exception {
         byte[] rpkFixture = new byte[2500];
         new Random(5).nextBytes(rpkFixture);
         ExecutorService band = Executors.newSingleThreadExecutor();
@@ -129,13 +146,16 @@ public class BandProtocolTest {
             Future<?> hardware = band.submit(() -> {
                 try (PipedOutputStream output = bandOut) {
                     emulateBand(new DataInputStream(bandIn), output, rpkFixture, receiptCode, rejectOnePart, emptyConfirmation,
-                            authenticated, idleAcknowledged);
+                            authenticated, idleAcknowledged, idleProbe);
                 }
                 return null;
             });
             protocol.authenticate(TEST_KEY, 36, "Test phone");
             authenticated.countDown();
             assertTrue(idleAcknowledged.await(2, TimeUnit.SECONDS));
+            if (idleProbe != IdleProbe.NONE) {
+                assertEquals(idleProbe == IdleProbe.REPLY, protocol.keepSessionAlive());
+            }
             try {
                 BandProtocol.Result result = protocol.install(rpkFixture, (stage, percent) -> {});
                 hardware.get(2, TimeUnit.SECONDS);
@@ -152,7 +172,7 @@ public class BandProtocolTest {
 
     private static void emulateBand(DataInputStream input, PipedOutputStream output, byte[] rpk, int receiptCode,
                                     boolean rejectOnePart, boolean emptyConfirmation,
-                                    CountDownLatch authenticated, CountDownLatch idleAcknowledged)
+                                    CountDownLatch authenticated, CountDownLatch idleAcknowledged, IdleProbe idleProbe)
             throws Exception {
         byte[] greeting = new byte[11];
         input.readFully(greeting);
@@ -181,7 +201,8 @@ public class BandProtocolTest {
         reply(output, 2, emptyConfirmation ? hex("0801101b1a00") : authConfirmation(1), null);
         assertArrayEquals(BandMessages.requestDeviceInfo(), decrypted(nextData(input), toBand));
         byte[] info = BandMessages.join(BandMessages.bytes(2, new byte[]{'1'}), BandMessages.bytes(4, new byte[]{'Q'}));
-        reply(output, 3, BandMessages.join(hex("08021002"), BandMessages.bytes(4, BandMessages.bytes(3, info))), toPhone);
+        byte[] infoReply = BandMessages.join(hex("08021002"), BandMessages.bytes(4, BandMessages.bytes(3, info)));
+        reply(output, 3, infoReply, toPhone);
         assertTrue(authenticated.await(2, TimeUnit.SECONDS));
         reply(output, 77, hex("080010001a00"), toPhone);
         BandWire.Frame authAck = BandWire.decode(input);
@@ -192,6 +213,15 @@ public class BandProtocolTest {
         assertEquals(77, idleAck.sequence());
         idleAcknowledged.countDown();
 
+        if (idleProbe != IdleProbe.NONE) {
+            assertArrayEquals(BandMessages.requestDeviceInfo(), decrypted(nextData(input), toBand));
+            if (idleProbe == IdleProbe.REPLY) {
+                reply(output, 78, infoReply, toPhone);
+                BandWire.Frame probeAck = BandWire.decode(input);
+                assertEquals(BandWire.ACK, probeAck.type());
+                assertEquals(78, probeAck.sequence());
+            }
+        }
         assertArrayEquals(BandMessages.prepareApp(BundledPackages.APP_PACKAGE, rpk.length),
                 decrypted(nextData(input), toBand));
         reply(output, 4, hex(rejectOnePart ? "08141001b201061a0408001060" : "08141001b201041a020800"), toPhone);

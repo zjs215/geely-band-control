@@ -1,5 +1,5 @@
 <resources>
-    <color name="installer_icon_background">#E2CCFA</color>
+    <color name="installer_icon_background">#AB0805</color>
     <style name="InstallerTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#75DCC2</item>

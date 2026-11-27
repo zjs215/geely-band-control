@@ -9,15 +9,20 @@ final class BandSession implements AutoCloseable {
     final String address;
     final BluetoothSocket socket;
     final BandRfcomm.Route route;
+    final boolean directRejected;
     final BandProtocol protocol;
     final BandDiagnostics.Trace trace;
+    boolean keepAlivePending;
+    volatile boolean keepAliveEnabled;
     private final BandWire wire;
 
-    BandSession(String address, BluetoothSocket socket, BandRfcomm.Route route, BandDiagnostics.Trace trace)
+    BandSession(String address, BluetoothSocket socket, BandRfcomm.Route route, boolean directRejected,
+                BandDiagnostics.Trace trace)
             throws IOException {
         this.address = address;
         this.socket = socket;
         this.route = route;
+        this.directRejected = directRejected;
         this.trace = trace;
         wire = new BandWire(socket.getInputStream(), socket.getOutputStream(), trace);
         protocol = new BandProtocol(wire, trace);
@@ -29,6 +34,7 @@ final class BandSession implements AutoCloseable {
 
     @Override
     public void close() {
+        keepAliveEnabled = false;
         trace.event("session.close", "socket_connected", socket.isConnected(), "wire_open", wire.isOpen());
         wire.close();
         try {

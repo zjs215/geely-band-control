@@ -20,6 +20,8 @@ final class GitHubRelease {
     private static final String DOWNLOAD = "https://github.com" + REPO + "/releases/download/";
     private static final int MAX_ASSET_BYTES = 24 * 1024 * 1024;
 
+    private static final int MAX_NOTES_CHARS = 4000;
+
     record Asset(String tag, String name, String url, int size, String digest) {}
 
     static Asset latest(InstallTarget target) throws IOException {
@@ -34,7 +36,7 @@ final class GitHubRelease {
         return parse(json).asset(target);
     }
 
-    private static Release parse(String json) throws IOException {
+    static Release parse(String json) throws IOException {
         try {
             JSONObject release = new JSONObject(json);
             String tag = release.getString("tag_name");
@@ -42,13 +44,55 @@ final class GitHubRelease {
                     || !tag.matches("v[0-9]{1,6}\\.[0-9]{1,6}\\.[0-9]{1,6}")) {
                 throw new IOException("GitHub 暂无可用的稳定版");
             }
-            return new Release(tag, release.getJSONArray("assets"));
+            String name = release.optString("name", "").trim();
+            String body = formatNotes(release.optString("body", ""));
+            return new Release(tag, name, body, release.getJSONArray("assets"));
         } catch (JSONException invalid) {
             throw new IOException("无法读取 GitHub 发布信息", invalid);
         }
     }
 
-    record Release(String tag, JSONArray assets) {
+    static String formatNotes(String raw) {
+        if (raw == null || raw.isEmpty()) return "";
+        String text = raw.replace("\r\n", "\n").replace('\r', '\n').trim();
+        if (text.isEmpty()) return "";
+        StringBuilder formatted = new StringBuilder(Math.min(text.length(), MAX_NOTES_CHARS));
+        int blankLines = 0;
+        for (String rawLine : text.split("\n", -1)) {
+            String line = rawLine.trim();
+            if (line.isEmpty()) {
+                if (formatted.length() > 0 && blankLines == 0) {
+                    formatted.append('\n');
+                    blankLines = 1;
+                }
+                continue;
+            }
+            blankLines = 0;
+            line = line.replaceAll("^#{1,6}\\s+", "");
+            if (line.startsWith("- ") || line.startsWith("* ")) {
+                line = "• " + line.substring(2).trim();
+            }
+            line = line.replaceAll("\\[([^\\]]+)\\]\\(([^)]+)\\)", "$1")
+                    .replace("**", "")
+                    .replace("__", "")
+                    .replace("`", "");
+            if (formatted.length() > 0) formatted.append('\n');
+            if (formatted.length() + line.length() > MAX_NOTES_CHARS) {
+                int remaining = Math.max(0, MAX_NOTES_CHARS - formatted.length() - 1);
+                if (remaining > 0) formatted.append(line, 0, Math.min(line.length(), remaining));
+                formatted.append('…');
+                break;
+            }
+            formatted.append(line);
+        }
+        return formatted.toString().trim();
+    }
+
+    record Release(String tag, String name, String body, JSONArray assets) {
+        Release(String tag, JSONArray assets) {
+            this(tag, "", "", assets);
+        }
+
         Asset asset(InstallTarget target) throws IOException {
             for (String name : new String[]{target.asset, target.previousAsset}) {
                 for (int i = 0; i < assets.length(); i++) {

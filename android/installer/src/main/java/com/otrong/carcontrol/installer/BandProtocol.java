@@ -39,6 +39,7 @@ final class BandProtocol implements AutoCloseable {
     private static final int DEFAULT_SLICE = 4096;
     private static final int PACKETS_PER_WINDOW = 18;
     private static final int TRANSFER_ATTEMPTS = 3;
+    private static final int IDLE_REPLY_MS = 650;
 
     enum Result { CONFIRMED, SENT }
 
@@ -234,27 +235,8 @@ final class BandProtocol implements AutoCloseable {
     private void checkSessionReady(boolean explicitlyApproved) throws Exception {
         trace.event("auth.readiness_probe", "explicit_confirmation", explicitlyApproved);
         try {
-            sendEncrypted(BandMessages.requestDeviceInfo());
-            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(1200);
-            while (true) {
-                BandWire.Frame frame = receive(deadline);
-                if (frame.type() == BandWire.SESSION && frame.payload().length != 0 && frame.payload()[0] == 1) {
-                    throw new InstallFailure("设备在认证后重新开启了蓝牙会话，请重试连接。");
-                }
-                byte[] encrypted = frame.payload();
-                if (encrypted.length < 2 || encrypted[1] != ENCRYPTED) continue;
-                byte[] body = protobufBody(frame, true);
-                if (body != null) {
-                    try {
-                        if (BandMessages.isDeviceInfoReply(body)) {
-                            trace.event("auth.readiness_reply");
-                            return;
-                        }
-                    } catch (IOException unrelated) {
-                        trace.failure("auth.readiness_unrecognized", unrelated);
-                    }
-                }
-            }
+            readDeviceInfo(1200);
+            trace.event("auth.readiness_reply");
         } catch (SocketTimeoutException noInfo) {
             trace.event("auth.readiness_timeout", "explicit_confirmation", explicitlyApproved);
             if (!wire.isOpen()) {
@@ -263,18 +245,62 @@ final class BandProtocol implements AutoCloseable {
             if (!explicitlyApproved) {
                 throw new InstallFailure("设备未确认认证，且加密通道未应答。请检查蓝牙配对后重试。", noInfo);
             }
+        } catch (SessionRestarted restarted) {
+            throw new InstallFailure("设备在认证后重新开启了蓝牙会话，请重试连接。", restarted);
         } catch (IOException failure) {
-            if (failure instanceof InstallFailure reported) throw reported;
             throw new InstallFailure("设备在认证后检查连接时断开。请先检查系统蓝牙配对。", failure);
         }
     }
 
+    synchronized boolean keepSessionAlive() throws Exception {
+        if (!authenticated || !wire.isOpen()) throw new IOException("Bluetooth session closed");
+        wire.collectReplies(true);
+        trace.event("idle.keepalive_probe");
+        try {
+            readDeviceInfo(IDLE_REPLY_MS);
+            trace.event("idle.keepalive_reply");
+            return true;
+        } catch (SocketTimeoutException noReply) {
+            boolean open = wire.isOpen();
+            trace.event("idle.keepalive_timeout", "wire_open", open);
+            if (!open) {
+                authenticated = false;
+                throw noReply;
+            }
+            return false;
+        } catch (Exception failure) {
+            authenticated = false;
+            trace.failure("idle.keepalive_failed", failure);
+            throw failure;
+        } finally {
+            wire.collectReplies(false);
+        }
+    }
+
+    private void readDeviceInfo(int timeoutMs) throws Exception {
+        sendEncrypted(BandMessages.requestDeviceInfo());
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        while (true) {
+            BandWire.Frame frame = wire.receive(deadline);
+            checkPeerRestart(frame);
+            byte[] payload = frame.payload();
+            if (frame.type() != BandWire.DATA || payload.length < 2 || payload[1] != ENCRYPTED) continue;
+            byte[] body = protobufBody(frame, true);
+            if (body == null) continue;
+            try {
+                if (BandMessages.isDeviceInfoReply(body)) return;
+            } catch (IOException unrelated) {
+                trace.failure("device_info.unrecognized", unrelated);
+            }
+        }
+    }
+
     long timeSinceAuth() {
-        return authenticated ? TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - authenticatedAt) : -1L;
+        return authenticatedAt != 0 ? TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - authenticatedAt) : -1L;
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
         authenticated = false;
         if (toBandKey != null) Arrays.fill(toBandKey, (byte) 0);
         if (fromBandKey != null) Arrays.fill(fromBandKey, (byte) 0);
@@ -378,12 +404,16 @@ final class BandProtocol implements AutoCloseable {
 
     private BandWire.Frame receive(long deadline) throws IOException, InterruptedException {
         BandWire.Frame frame = wire.receive(deadline);
-        if (authenticated && frame.type() == BandWire.SESSION && frame.payload().length > 0
+        if (authenticated) checkPeerRestart(frame);
+        return frame;
+    }
+
+    private void checkPeerRestart(BandWire.Frame frame) throws SessionRestarted {
+        if (frame.type() == BandWire.SESSION && frame.payload().length > 0
                 && frame.payload()[0] == 1) {
             trace.event("wire.peer_restarted");
             throw new SessionRestarted();
         }
-        return frame;
     }
 
     private static final class SessionRestarted extends IOException {

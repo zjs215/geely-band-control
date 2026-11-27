@@ -38,6 +38,7 @@ import android.provider.MediaStore;
 import android.provider.Settings;
 import android.text.Editable;
 import android.text.InputType;
+import android.text.TextUtils;
 import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
@@ -87,6 +88,7 @@ public final class InstallerActivity extends Activity {
     private static final String LOG_BAND_ADDRESS = "lastBandAddress";
     private static final String DEVICE_SETTINGS = "installer-devices";
     private static final long BAND_IDLE_MS = 90_000;
+    private static final long BAND_KEEP_ALIVE_MS = 800;
     private static final long UPDATE_INTERVAL_MS = 300_000;
     private static final int COLOR_BACKGROUND = 0xff111817;
     private static final int COLOR_SURFACE = 0xff202b29;
@@ -128,6 +130,7 @@ public final class InstallerActivity extends Activity {
     private LinearLayout bandActions;
     private Button retryBand;
     private Button rescanBand;
+    private Button repairBand;
     private LinearLayout bandSettings;
     private LinearLayout watchSettings;
     private EditText address;
@@ -147,6 +150,9 @@ public final class InstallerActivity extends Activity {
     private TextView phoneUpdate;
     private TextView bandUpdate;
     private TextView watchUpdate;
+    private LinearLayout releaseNotesPanel;
+    private TextView releaseNotesTitle;
+    private TextView releaseNotesBody;
     private GitHubRelease.Release latestRelease;
     private boolean checkingRelease;
     private long lastReleaseCheck = -UPDATE_INTERVAL_MS;
@@ -274,6 +280,7 @@ public final class InstallerActivity extends Activity {
         title.setTypeface(null, Typeface.BOLD);
         add(heading, title, 0);
         updateSource = text(getString(R.string.source_summary), 12, COLOR_SECONDARY);
+        updateSource.setOnClickListener(view -> showReleaseNotesDialog());
         add(heading, updateSource, 5);
         add(content, header, 0);
 
@@ -287,6 +294,23 @@ public final class InstallerActivity extends Activity {
             targets.addView(target, new RadioGroup.LayoutParams(0, dp(44), 1));
         }
         add(content, targets, 20);
+
+        releaseNotesPanel = inset();
+        GradientDrawable notesBackground = rounded(COLOR_INSET, 14);
+        notesBackground.setStroke(dp(1), COLOR_BORDER);
+        releaseNotesPanel.setBackground(new RippleDrawable(ColorStateList.valueOf(0x2275dcc2), notesBackground, null));
+        releaseNotesTitle = text("", 14, COLOR_ACCENT);
+        releaseNotesTitle.setTypeface(null, Typeface.BOLD);
+        add(releaseNotesPanel, releaseNotesTitle, 0);
+        releaseNotesBody = text("", 13, COLOR_SECONDARY);
+        releaseNotesBody.setMaxLines(6);
+        releaseNotesBody.setEllipsize(TextUtils.TruncateAt.END);
+        add(releaseNotesPanel, releaseNotesBody, 4);
+        TextView releaseNotesMore = text(getString(R.string.release_notes_more), 12, COLOR_ACCENT);
+        add(releaseNotesPanel, releaseNotesMore, 6);
+        releaseNotesPanel.setOnClickListener(view -> showReleaseNotesDialog());
+        releaseNotesPanel.setVisibility(View.GONE);
+        add(content, releaseNotesPanel, 12);
 
         phonePanel = card();
         wearPanel = column();
@@ -328,6 +352,9 @@ public final class InstallerActivity extends Activity {
         addAction(recoveryActions, retryBand);
         addAction(recoveryActions, rescanBand);
         add(bandRecovery, recoveryActions, 0);
+        repairBand = button(R.string.band_repair, true, () -> {});
+        repairBand.setVisibility(View.GONE);
+        add(bandRecovery, repairBand, 6);
         add(bandRecovery, button(R.string.band_export_diagnostics, false, this::chooseDiagnosticsDestination), 4);
         bandRecovery.setVisibility(View.GONE);
         add(feedback, bandRecovery, 6);
@@ -492,6 +519,7 @@ public final class InstallerActivity extends Activity {
         add(bandSettings, button(R.string.band_export, false, this::chooseRpkDestination), 2);
         add(bandSettings, button(R.string.band_export_diagnostics, false, this::chooseDiagnosticsDestination), 2);
         add(bandSettings, button(R.string.band_device, false, () -> withBluetooth(this::pickBand)), 2);
+        add(bandSettings, button(R.string.band_repair, false, () -> rePairBand(false)), 2);
         add(bandSettings, button(R.string.band_pair_settings, false, this::showBandPairSettings), 2);
         address = input(R.string.band_address, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         address.setText(getSharedPreferences(LOG_SETTINGS, MODE_PRIVATE).getString(LOG_BAND_ADDRESS, ""));
@@ -940,18 +968,41 @@ public final class InstallerActivity extends Activity {
     private void startBandInstall() {
         if (current != null || packages == null) return;
         if (bandSession != null && bandSession.isOpen()) {
-            installBand(null);
+            BandSession session = bandSession;
+            InstallTarget target = selectedWearable.target;
+            bandIdleDeadline = SystemClock.elapsedRealtime() + BAND_IDLE_MS;
+            runOperationOn(versionWorker, "正在准备穿戴安装包", 75, false,
+                    operation -> installPackages.resolve(target, operation::report), selected -> {
+                        if (bandSession == session && session.isOpen()) {
+                            installBand(selected, false);
+                        } else if (visible) {
+                            boolean fallback = session.directRejected && !session.route.isDirect();
+                            closeBandSession();
+                            showBandRecoveryActions(fallback ? getString(R.string.band_repair_guide)
+                                    : "准备安装包时手环连接已断开，请重试连接。", true, fallback);
+                        }
+                    }, ignored -> {}, failure -> setStatus("未能准备穿戴安装包，请重试。"));
             return;
         }
         closeBandSession();
         prepareBand(true);
     }
 
+    private void rePairBand(boolean installAfter) {
+        if (current != null || packages == null) return;
+        closeBandSession();
+        prepareBand(true, installAfter, true);
+    }
+
     private void prepareBand(boolean installAfter) {
-        prepareBand(true, installAfter);
+        prepareBand(true, installAfter, false);
     }
 
     private void prepareBand(boolean readLatest, boolean installAfter) {
+        prepareBand(readLatest, installAfter, false);
+    }
+
+    private void prepareBand(boolean readLatest, boolean installAfter, boolean forceRepair) {
         if (current != null || packages == null) return;
         String mac = WearableLog.address(value(address));
         if (mac.isEmpty()) {
@@ -963,10 +1014,10 @@ public final class InstallerActivity extends Activity {
             changeWearable(fromAddress, mac);
         }
         if (readLatest && value(authKey).trim().isEmpty() && logFolder != null && !usingPickedZip) {
-            readLog(logFolder, true, () -> prepareBand(false, installAfter));
+            readLog(logFolder, true, () -> prepareBand(false, installAfter, forceRepair));
             return;
         }
-        withBluetooth(() -> connectBand(installAfter));
+        withBluetooth(() -> connectBand(installAfter, forceRepair));
     }
 
     private void requestBandLog(boolean installAfter) {
@@ -1004,7 +1055,7 @@ public final class InstallerActivity extends Activity {
         launch(HEALTH_PACKAGES, "手机上未找到小米运动健康。");
     }
 
-    private void installBand(InstallPackages.Selected ready) {
+    private void installBand(InstallPackages.Selected selected, boolean oneTap) {
         BandSession session = bandSession;
         if (current != null || packages == null) return;
         if (session == null || !session.isOpen()) {
@@ -1012,16 +1063,15 @@ public final class InstallerActivity extends Activity {
             setStatus("请先连接手环。");
             return;
         }
+        session.keepAliveEnabled = false;
         bandSession = null;
         main.removeCallbacks(checkBandConnection);
         InstallTarget target = selectedWearable.target;
-        runOperation("正在准备穿戴安装包", 180, false, operation -> {
+        runOperation("正在初始化穿戴安装", 180, false, operation -> {
             operation.bandTrace = session.trace;
             try (session) {
-                session.trace.event("install.request", "target", target, "one_tap", ready != null);
+                session.trace.event("install.request", "target", target, "one_tap", oneTap);
                 operation.attach(session.socket);
-                InstallPackages.Selected selected = ready == null
-                        ? installPackages.resolve(target, operation::report) : ready;
                 session.trace.event("install.package", "version_code", selected.versionCode(), "bytes", selected.bytes().length,
                         "github", "GitHub".equals(selected.source()));
                 String installedKey = "bandVersion:" + session.address;
@@ -1049,17 +1099,21 @@ public final class InstallerActivity extends Activity {
                 }
             }
         }, this::setStatus, ignored -> {}, failure -> {
-            String message = failureMessage(failure, "认证后安装中断，请重连后再试。");
-            if (failure instanceof BandProtocol.InstallRejected) showBandInstallRejected(message);
-            else showBandRecoveryActions(message, true);
+            if (failure instanceof BandProtocol.InstallRejected) {
+                showBandInstallRejected(failureMessage(failure, "手环拒绝安装。"));
+            } else if (session.directRejected && !session.route.isDirect()) {
+                showBandRecoveryActions(getString(R.string.band_repair_guide), true, true);
+            } else {
+                showBandRecoveryActions(failureMessage(failure, "认证后安装中断，请重连后再试。"), true, false);
+            }
         });
     }
 
     @SuppressLint("MissingPermission")
-    private void connectBand(boolean installAfter) {
+    private void connectBand(boolean installAfter, boolean forceRepair) {
         if (packages == null || current != null || bandSession != null) return;
         BandDiagnostics.Trace trace = bandDiagnostics.begin();
-        trace.event("connect.request", "one_tap", installAfter);
+        trace.event("connect.request", "one_tap", installAfter, "force_repair", forceRepair);
         String manual = value(authKey).trim();
         BluetoothAdapter adapter = bluetooth();
         if (adapter == null) {
@@ -1104,17 +1158,19 @@ public final class InstallerActivity extends Activity {
         InstallTarget target = profile.target;
         boolean knownBand = mac.equals(profileAddress(profile));
         int bondState = device.getBondState();
-        boolean reconnect = knownBand || bondState == BluetoothDevice.BOND_BONDED;
+        boolean reconnect = knownBand || bondState == BluetoothDevice.BOND_BONDED || forceRepair;
         String fallbackRoute = profile == WearableProfile.BAND_10_PRO ? ""
                 : deviceSettings().getString("bandRoute:" + mac, "");
-        BandRfcomm.Route remembered = BandRfcomm.Route.remembered(
+        BandRfcomm.Route remembered = forceRepair ? null : BandRfcomm.Route.remembered(
                 deviceSettings().getString("bandTransferRoute:" + mac, fallbackRoute));
         observedBand = device;
         observedBandTrace = trace;
         observeBandUntil = SystemClock.elapsedRealtime() + TimeUnit.MINUTES.toMillis(4);
         trace.event("connect.parameters", "profile", profile, "reconnect", reconnect, "bond", bondState,
-                "remembered_route", remembered, "manual_key", !manual.isEmpty());
-        runOperation(reconnect ? "正在重连已知手环" : "正在连接手环", installAfter ? 175 : 115, false,
+                "remembered_route", remembered, "manual_key", !manual.isEmpty(), "force_repair", forceRepair);
+        int timeoutSeconds = installAfter ? (forceRepair ? 210 : 175) : (forceRepair ? 150 : 115);
+        runOperation(forceRepair ? "正在重置手环蓝牙配对" : reconnect ? "正在重连已知手环" : "正在连接手环",
+                timeoutSeconds, false,
                 operation -> {
                     operation.bandTrace = trace;
                     try {
@@ -1124,7 +1180,8 @@ public final class InstallerActivity extends Activity {
                                 == PackageManager.PERMISSION_GRANTED) && adapter.isDiscovering()) {
                             adapter.cancelDiscovery();
                         }
-                        return new PreparedBand(openBand(device, mac, key, reconnect, remembered, operation, trace), selected);
+                        return new PreparedBand(openBand(device, mac, key, reconnect, remembered, forceRepair,
+                                operation, trace), selected);
                     } catch (Exception failure) {
                         trace.failure("connect.operation_failed", failure);
                         throw failure;
@@ -1134,13 +1191,13 @@ public final class InstallerActivity extends Activity {
                 }, prepared -> {
                     BandSession session = prepared.session();
                     connectedBand(profile, session);
-                    if (installAfter && bandSession == session) installBand(prepared.selected());
+                    if (installAfter && bandSession == session) installBand(prepared.selected(), true);
                 }, prepared -> prepared.session().close(), failure -> {
                     if (failure instanceof BandConnectionFailure && visible) {
                         showBandConnectionRecovery(reconnect, installAfter);
                     } else {
                         showBandRecoveryActions(failureMessage(failure, "设备会话建立失败，请核对蓝牙状态和 AuthKey。"),
-                                installAfter);
+                                installAfter, forceRepair || reconnect);
                     }
                 });
     }
@@ -1153,19 +1210,27 @@ public final class InstallerActivity extends Activity {
         retryBand.setVisibility(reconnect ? View.VISIBLE : View.GONE);
         retryBand.setText(R.string.band_retry);
         rescanBand.setVisibility(View.VISIBLE);
+        repairBand.setVisibility(reconnect ? View.VISIBLE : View.GONE);
         retryBand.setOnClickListener(view -> prepareBand(installAfter));
         rescanBand.setOnClickListener(view -> withBluetooth(true, () -> searchBand(installAfter)));
+        repairBand.setOnClickListener(view -> rePairBand(installAfter));
         bandRecovery.setVisibility(View.VISIBLE);
         bandActions.setVisibility(View.GONE);
     }
 
     private void showBandRecoveryActions(String message, boolean installAfter) {
+        showBandRecoveryActions(message, installAfter, false);
+    }
+
+    private void showBandRecoveryActions(String message, boolean installAfter, boolean offerRepair) {
         setStatus(message);
         retryBand.setText(R.string.band_retry);
         retryBand.setVisibility(View.VISIBLE);
         rescanBand.setVisibility(View.VISIBLE);
+        repairBand.setVisibility(offerRepair ? View.VISIBLE : View.GONE);
         retryBand.setOnClickListener(view -> prepareBand(installAfter));
         rescanBand.setOnClickListener(view -> withBluetooth(true, () -> searchBand(installAfter)));
+        repairBand.setOnClickListener(view -> rePairBand(installAfter));
         bandRecovery.setVisibility(View.VISIBLE);
         bandActions.setVisibility(View.GONE);
     }
@@ -1176,29 +1241,34 @@ public final class InstallerActivity extends Activity {
         retryBand.setVisibility(View.VISIBLE);
         retryBand.setOnClickListener(view -> chooseRpkDestination());
         rescanBand.setVisibility(View.GONE);
+        repairBand.setVisibility(View.GONE);
         bandRecovery.setVisibility(View.VISIBLE);
         bandActions.setVisibility(View.GONE);
     }
 
     @SuppressLint("MissingPermission")
     private BandSession openBand(BluetoothDevice device, String mac, byte[] key, boolean reconnect,
-                                 BandRfcomm.Route remembered, Operation operation, BandDiagnostics.Trace trace)
+                                 BandRfcomm.Route remembered, boolean forceRepair, Operation operation,
+                                 BandDiagnostics.Trace trace)
             throws Exception {
         BluetoothSocket socket = null;
         BandSession candidate = null;
         boolean authenticated = false;
         try {
             try {
+                if (forceRepair && device.getBondState() != BluetoothDevice.BOND_NONE) {
+                    resetBond(device, operation, trace);
+                }
                 if (device.getBondState() != BluetoothDevice.BOND_BONDED) {
-                    trace.event("pairing.begin");
-                    awaitPairing(device, operation);
+                    trace.event("pairing.begin", "force_repair", forceRepair);
+                    awaitPairing(device, forceRepair, operation, trace);
                     trace.event("pairing.end", "bond", device.getBondState());
                 }
                 operation.report(reconnect ? "正在尝试手环兼容重连" : "正在连接手环", -1);
                 BandRfcomm.Connected connected = BandRfcomm.open(device, reconnect, remembered, deadlines,
                         operation::attach, trace);
                 socket = connected.socket();
-                candidate = new BandSession(mac, socket, connected.route(), trace);
+                candidate = new BandSession(mac, socket, connected.route(), connected.directRejected(), trace);
             } catch (IOException failed) {
                 throw new BandConnectionFailure(failed);
             }
@@ -1225,6 +1295,7 @@ public final class InstallerActivity extends Activity {
             return;
         }
         bandSession = session;
+        session.keepAliveEnabled = profile == WearableProfile.BAND_10_PRO;
         bandIdleDeadline = SystemClock.elapsedRealtime() + BAND_IDLE_MS;
         deviceSettings().edit().putString("bandAddress:" + profile.name(), session.address)
                 .putString("bandProfile:" + session.address, profile.name())
@@ -1232,21 +1303,49 @@ public final class InstallerActivity extends Activity {
         authKey.setText("");
         refreshBandButtons();
         setStatus("穿戴设备已连接并完成认证，可以安装。");
-        main.postDelayed(checkBandConnection, 1000);
+        main.postDelayed(checkBandConnection, session.keepAliveEnabled ? BAND_KEEP_ALIVE_MS : 1000);
     }
 
     private void checkBandConnection() {
-        if (bandSession == null) return;
-        if (!bandSession.isOpen() || SystemClock.elapsedRealtime() >= bandIdleDeadline) {
-            boolean expired = bandSession.isOpen();
-            bandSession.trace.event(expired ? "session.idle_expired" : "session.idle_link_lost",
-                    "ms_since_auth", bandSession.protocol.timeSinceAuth(), "socket_connected", bandSession.socket.isConnected());
-            closeBandSession();
-            if (expired) setStatus("空闲连接已释放。安装时可重新连接手环。");
-            else showBandRecoveryActions("手环连接已断开，请重新连接。", false);
-        } else {
-            main.postDelayed(checkBandConnection, 1000);
+        BandSession session = bandSession;
+        if (session == null) return;
+        boolean open = session.isOpen();
+        if (!open || SystemClock.elapsedRealtime() >= bandIdleDeadline) {
+            endIdleBandSession(session, open);
+            return;
         }
+        if (session.keepAliveEnabled && !session.keepAlivePending) probeBandSession(session);
+        main.postDelayed(checkBandConnection, session.keepAliveEnabled ? BAND_KEEP_ALIVE_MS : 1000);
+    }
+
+    private void probeBandSession(BandSession session) {
+        session.keepAlivePending = true;
+        worker.execute(() -> {
+            boolean failed = false;
+            try {
+                if (session.keepAliveEnabled && session.isOpen()) session.protocol.keepSessionAlive();
+            } catch (Exception failure) {
+                failed = true;
+            } finally {
+                boolean lost = failed;
+                main.post(() -> {
+                    session.keepAlivePending = false;
+                    if (lost && bandSession == session) endIdleBandSession(session, false);
+                });
+            }
+        });
+    }
+
+    private void endIdleBandSession(BandSession session, boolean expired) {
+        session.trace.event(expired ? "session.idle_expired" : "session.idle_link_lost",
+                "ms_since_auth", session.protocol.timeSinceAuth(), "socket_connected", session.socket.isConnected(),
+                "route", session.route, "direct_rejected", session.directRejected);
+        boolean fallback = !expired && session.directRejected && !session.route.isDirect();
+        closeBandSession();
+        if (current != null) return;
+        if (expired) setStatus("空闲连接已释放。安装时可重新连接手环。");
+        else showBandRecoveryActions(fallback ? getString(R.string.band_repair_guide)
+                : "手环连接已断开，请重新连接。", false, fallback);
     }
 
     private void closeBandSession() {
@@ -1283,15 +1382,44 @@ public final class InstallerActivity extends Activity {
     }
 
     @SuppressLint("MissingPermission")
-    private static void awaitPairing(BluetoothDevice device, Operation operation)
+    private static void resetBond(BluetoothDevice device, Operation operation, BandDiagnostics.Trace trace)
+            throws InterruptedException, InstallFailure {
+        operation.report("正在断开旧连接并重置蓝牙配对", -1);
+        trace.event("pairing.reset_begin", "bond", device.getBondState());
+        if (!BandRfcomm.removeBond(device, trace)) {
+            throw new InstallFailure("系统未允许自动取消旧配对。请在「连接设置 → 检查系统蓝牙配对」中取消手环配对后再试。");
+        }
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (System.nanoTime() < deadline) {
+            if (device.getBondState() == BluetoothDevice.BOND_NONE) {
+                Thread.sleep(300);
+                trace.event("pairing.reset_done");
+                return;
+            }
+            Thread.sleep(150);
+        }
+        trace.event("pairing.reset_timeout", "bond", device.getBondState());
+        throw new InstallFailure("旧蓝牙配对尚未释放。请在「连接设置 → 检查系统蓝牙配对」中取消手环配对后再试。");
+    }
+
+    @SuppressLint("MissingPermission")
+    private static void awaitPairing(BluetoothDevice device, boolean preferClassic, Operation operation,
+                                     BandDiagnostics.Trace trace)
             throws InterruptedException, InstallFailure {
         int state = device.getBondState();
         if (state == BluetoothDevice.BOND_BONDED) return;
         boolean bonding = state == BluetoothDevice.BOND_BONDING;
-        if (!bonding && !device.createBond()) return; // The RFCOMM connect path can request pairing too.
+        if (!bonding) {
+            boolean started = preferClassic ? BandRfcomm.createClassicBond(device, trace) : device.createBond();
+            if (!started) {
+                if (preferClassic) throw new InstallFailure("未能发起系统蓝牙配对，请保持手环亮屏靠近手机后再试。");
+                return; // The RFCOMM connect path can request pairing too.
+            }
+        }
 
-        operation.report("等待系统蓝牙配对。请在手机和手环上按提示确认。", -1);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
+        operation.report(preferClassic ? "请在手机配对弹窗和手环上点击确认配对。"
+                : "等待系统蓝牙配对。请在手机和手环上按提示确认。", -1);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(preferClassic ? 45 : 40);
         while (System.nanoTime() < deadline) {
             state = device.getBondState();
             if (state == BluetoothDevice.BOND_BONDED) return;
@@ -1299,7 +1427,8 @@ public final class InstallerActivity extends Activity {
             bonding |= state == BluetoothDevice.BOND_BONDING;
             Thread.sleep(250);
         }
-        throw new InstallFailure("系统蓝牙配对未完成。请打开手环的「连接新手机」页面后再试。");
+        throw new InstallFailure(preferClassic ? "系统蓝牙配对未完成。请确认手机配对弹窗和手环上的确认提示后重试。"
+                : "系统蓝牙配对未完成。请打开手环的「连接新手机」页面后再试。");
     }
 
     private void pairWatch() {
@@ -1566,10 +1695,15 @@ public final class InstallerActivity extends Activity {
         if (packages == null) return;
         if (checkingRelease) {
             updateSource.setText(R.string.update_checking);
+            updateSource.setTextColor(COLOR_SECONDARY);
         } else if (latestRelease != null) {
-            updateSource.setText(getString(R.string.update_checked, latestRelease.tag()));
+            boolean hasNotes = !latestRelease.body().isEmpty();
+            updateSource.setText(getString(hasNotes ? R.string.update_checked_notes : R.string.update_checked,
+                    latestRelease.tag()));
+            updateSource.setTextColor(hasNotes ? COLOR_ACCENT : COLOR_SECONDARY);
         } else if (lastReleaseCheck >= 0) {
             updateSource.setText(R.string.update_unavailable);
+            updateSource.setTextColor(COLOR_SECONDARY);
         }
 
         String mac = WearableLog.address(value(address));
@@ -1580,22 +1714,77 @@ public final class InstallerActivity extends Activity {
         boolean matchesWatch = watchEndpoint().equals(watchProbeEndpoint);
         AppUpdate.Installed watch = matchesWatch && watchRead ? watchedVersion : null;
 
-        boolean phoneHasUpdate = showUpdate(InstallTarget.PHONE, phone, phoneUpdate, "");
+        AppUpdate phoneResult = showUpdate(InstallTarget.PHONE, phone, phoneUpdate, "");
+        boolean phoneHasUpdate = phoneResult.comparison() == AppUpdate.Comparison.UPDATE;
         InstallTarget rpk = selectedWearable != null && selectedWearable.target.isRpk()
                 ? selectedWearable.target : InstallTarget.BAND;
-        bandHasUpdate = showUpdate(rpk, band, bandUpdate,
+        AppUpdate bandResult = showUpdate(rpk, band, bandUpdate,
                 band == null ? getString(R.string.band_version_unknown) : getString(R.string.band_version_known, band.label()));
+        bandHasUpdate = bandResult.comparison() == AppUpdate.Comparison.UPDATE;
         String watchStatus;
         if (matchesWatch && watchReading) watchStatus = getString(R.string.watch_version_reading);
         else if (watch != null) watchStatus = getString(R.string.watch_version_known, watch.label());
         else if (matchesWatch && watchRead) watchStatus = getString(R.string.watch_version_missing);
         else watchStatus = getString(R.string.watch_version_unknown);
-        watchHasUpdate = showUpdate(InstallTarget.WATCH, watch, watchUpdate, watchStatus);
+        AppUpdate watchResult = showUpdate(InstallTarget.WATCH, watch, watchUpdate, watchStatus);
+        watchHasUpdate = watchResult.comparison() == AppUpdate.Comparison.UPDATE;
         phoneTarget.setText(wearableChoice(R.string.target_phone, phoneHasUpdate));
         wearTarget.setText(wearableChoice(R.string.target_wearable, bandHasUpdate || watchHasUpdate));
+        refreshReleaseNotes(phoneResult, bandResult, watchResult);
     }
 
-    private boolean showUpdate(InstallTarget target, AppUpdate.Installed installed, TextView label, String installedLabel) {
+    private void refreshReleaseNotes(AppUpdate phoneResult, AppUpdate bandResult, AppUpdate watchResult) {
+        if (releaseNotesPanel == null) return;
+        if (latestRelease == null || latestRelease.body().isEmpty()) {
+            releaseNotesPanel.setVisibility(View.GONE);
+            return;
+        }
+        boolean wearable = targets != null && targets.getCheckedRadioButtonId() == wearTarget.getId();
+        boolean showInline;
+        if (!wearable) {
+            showInline = hasOnlineUpdate(phoneResult);
+        } else if (selectedWearable == WearableProfile.WATCH_5) {
+            showInline = hasOnlineUpdate(watchResult);
+        } else if (selectedWearable != null && selectedWearable.target.isRpk()) {
+            showInline = hasOnlineUpdate(bandResult);
+        } else {
+            showInline = hasOnlineUpdate(bandResult) || hasOnlineUpdate(watchResult);
+        }
+        if (!showInline) {
+            releaseNotesPanel.setVisibility(View.GONE);
+            return;
+        }
+        releaseNotesTitle.setText(releaseNotesHeading(latestRelease));
+        releaseNotesBody.setText(latestRelease.body());
+        releaseNotesPanel.setVisibility(View.VISIBLE);
+    }
+
+    private static boolean hasOnlineUpdate(AppUpdate update) {
+        return update.online() && update.comparison() != AppUpdate.Comparison.CURRENT;
+    }
+
+    private String releaseNotesHeading(GitHubRelease.Release release) {
+        if (!release.name().isEmpty() && !release.name().equalsIgnoreCase(release.tag())) {
+            return getString(R.string.release_notes_title, release.tag()) + " · " + release.name();
+        }
+        return getString(R.string.release_notes_title, release.tag());
+    }
+
+    private void showReleaseNotesDialog() {
+        if (latestRelease == null || latestRelease.body().isEmpty()) return;
+        ScrollView bodyScroll = new ScrollView(this);
+        TextView detail = text(latestRelease.body(), 14, COLOR_SECONDARY);
+        detail.setTextIsSelectable(true);
+        detail.setPadding(dp(22), dp(12), dp(22), dp(8));
+        bodyScroll.addView(detail);
+        new AlertDialog.Builder(this)
+                .setTitle(releaseNotesHeading(latestRelease))
+                .setView(bodyScroll)
+                .setPositiveButton(android.R.string.ok, null)
+                .show();
+    }
+
+    private AppUpdate showUpdate(InstallTarget target, AppUpdate.Installed installed, TextView label, String installedLabel) {
         AppUpdate update = AppUpdate.compare(target.bundled(packages), latestRelease, target, installed);
         String available = getString(update.online() ? R.string.update_github_version : R.string.update_local_version,
                 update.available());
@@ -1607,7 +1796,7 @@ public final class InstallerActivity extends Activity {
         };
         label.setTextColor(newer ? COLOR_ACCENT : COLOR_SECONDARY);
         label.setText(installedLabel.isEmpty() ? detail : installedLabel + "\n" + detail);
-        return newer;
+        return update;
     }
 
     private void launch(String[] names, String missing) {
@@ -1642,6 +1831,12 @@ public final class InstallerActivity extends Activity {
     private <T> void runOperation(String initial, int seconds, boolean readingLog,
                                   Work<T> work, Consumer<T> onSuccess, Consumer<T> onDiscard,
                                   Consumer<Exception> onFailure) {
+        runOperationOn(worker, initial, seconds, readingLog, work, onSuccess, onDiscard, onFailure);
+    }
+
+    private <T> void runOperationOn(ExecutorService executor, String initial, int seconds, boolean readingLog,
+                                    Work<T> work, Consumer<T> onSuccess, Consumer<T> onDiscard,
+                                    Consumer<Exception> onFailure) {
         if (current != null) return;
         getSystemService(InputMethodManager.class).hideSoftInputFromWindow(content.getWindowToken(), 0);
         Operation operation = new Operation(readingLog);
@@ -1649,7 +1844,7 @@ public final class InstallerActivity extends Activity {
         setBusy(true);
         setStatus(initial);
         operation.timer = deadlines.schedule(() -> operation.stop(true), seconds, TimeUnit.SECONDS);
-        worker.execute(() -> {
+        executor.execute(() -> {
             operation.thread = Thread.currentThread();
             T value = null;
             Exception error = null;

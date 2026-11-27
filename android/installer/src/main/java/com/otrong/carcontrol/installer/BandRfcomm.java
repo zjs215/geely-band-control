@@ -24,6 +24,10 @@ final class BandRfcomm {
     enum Route {
         DIRECT_SECURE, DIRECT_COMPAT, SPP_SECURE, SPP_COMPAT;
 
+        boolean isDirect() {
+            return this == DIRECT_SECURE || this == DIRECT_COMPAT;
+        }
+
         static Route remembered(String value) {
             for (Route route : values()) {
                 if (route.name().equals(value)) return route;
@@ -32,7 +36,9 @@ final class BandRfcomm {
         }
     }
 
-    record Connected(BluetoothSocket socket, Route route) {}
+    record Connected(BluetoothSocket socket, Route route, boolean directRejected) {}
+
+    record RouteOutcome<T>(T value, Route route, boolean directRejected) {}
 
     interface Attach {
         void socket(BluetoothSocket socket) throws InterruptedException;
@@ -45,20 +51,26 @@ final class BandRfcomm {
     static Connected open(BluetoothDevice device, boolean reconnect, Route remembered,
                           ScheduledExecutorService deadlines, Attach attach, BandDiagnostics.Trace trace)
             throws IOException, InterruptedException {
-        return tryRoutes(reconnect, remembered, route -> {
+        RouteOutcome<BluetoothSocket> outcome = tryRoutesOutcome(reconnect, remembered, route -> {
             trace.event("rfcomm.try", "route", route);
             try {
                 BluetoothSocket socket = openSocket(device, route, deadlines, attach, trace);
                 trace.event("rfcomm.connected", "route", route);
-                return new Connected(socket, route);
+                return socket;
             } catch (IOException | InterruptedException | SecurityException failure) {
                 trace.failure("rfcomm.failed", failure, "route", route);
                 throw failure;
             }
         });
+        return new Connected(outcome.value(), outcome.route(), outcome.directRejected());
     }
 
     static <T> T tryRoutes(boolean reconnect, Route remembered, Attempt<T> attempt)
+            throws IOException, InterruptedException {
+        return tryRoutesOutcome(reconnect, remembered, attempt).value();
+    }
+
+    static <T> RouteOutcome<T> tryRoutesOutcome(boolean reconnect, Route remembered, Attempt<T> attempt)
             throws IOException, InterruptedException {
         List<Route> routes = new ArrayList<>(reconnect ? Arrays.asList(
                 Route.DIRECT_SECURE, Route.DIRECT_COMPAT, Route.SPP_SECURE, Route.SPP_COMPAT) : Arrays.asList(
@@ -68,16 +80,54 @@ final class BandRfcomm {
             routes.add(0, remembered);
         }
         IOException failure = new IOException("未建立手环 RFCOMM 连接");
+        boolean directRejected = false;
         for (Route route : routes) {
             if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
             try {
-                return attempt.connect(route);
+                return new RouteOutcome<>(attempt.connect(route), route, directRejected);
             } catch (IOException unavailable) {
+                if (route.isDirect()) directRejected = true;
                 failure.addSuppressed(unavailable);
             }
         }
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
         throw failure;
+    }
+
+    @SuppressLint("MissingPermission")
+    static boolean removeBond(BluetoothDevice device, BandDiagnostics.Trace trace) {
+        try {
+            Object result = BluetoothDevice.class.getMethod("removeBond").invoke(device);
+            boolean removed = Boolean.TRUE.equals(result);
+            trace.event("pairing.remove_bond", "accepted", removed);
+            return removed;
+        } catch (InvocationTargetException rejected) {
+            trace.failure("pairing.remove_bond_failed",
+                    rejected.getCause() != null ? rejected.getCause() : rejected);
+            return false;
+        } catch (ReflectiveOperationException | SecurityException unavailable) {
+            trace.failure("pairing.remove_bond_failed", unavailable);
+            return false;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    static boolean createClassicBond(BluetoothDevice device, BandDiagnostics.Trace trace) {
+        try {
+            Object result = BluetoothDevice.class.getMethod("createBond", int.class)
+                    .invoke(device, BluetoothDevice.TRANSPORT_BREDR);
+            boolean started = Boolean.TRUE.equals(result);
+            trace.event("pairing.create_bond", "transport", BluetoothDevice.TRANSPORT_BREDR, "started", started);
+            if (started) return true;
+        } catch (InvocationTargetException rejected) {
+            trace.failure("pairing.create_classic_bond_failed",
+                    rejected.getCause() != null ? rejected.getCause() : rejected);
+        } catch (ReflectiveOperationException | SecurityException unavailable) {
+            trace.failure("pairing.create_classic_bond_failed", unavailable);
+        }
+        boolean started = device.createBond();
+        trace.event("pairing.create_bond", "transport", BluetoothDevice.TRANSPORT_AUTO, "started", started);
+        return started;
     }
 
     @SuppressLint("MissingPermission")
