@@ -1,0 +1,28 @@
+<resources>
+    <string name="app_name">腕上银河安装助手</string>
+    <string name="band_10_pro">小米手环 10 Pro</string>
+    <string name="watch_5">小米 Watch 5</string>
+    <string name="band_package">完整版 RPK · %1$s · %2$d KB</string>
+    <string name="watch_package">手表 APK · %1$s · %2$d KB</string>
+    <string name="band_guide">手环先通过小米运动健康绑定。安装时使用该手环的 AuthKey。连接被占用时，可在手机上暂时退出小米运动健康后再试。</string>
+    <string name="watch_guide">手表开启开发者选项和无线调试，手机与手表连接同一 Wi-Fi。首次用手表显示的配对码配对，安装时填写无线调试首页的连接端口。</string>
+    <string name="band_device">选择已配对手环</string>
+    <string name="band_address">手环蓝牙地址</string>
+    <string name="band_auth_key">绑定密钥 AuthKey</string>
+    <string name="band_install">安装到手环</string>
+    <string name="watch_host">手表无线调试 IP</string>
+    <string name="watch_pair_port">配对端口</string>
+    <string name="watch_pair_code">六位配对码</string>
+    <string name="watch_pair">配对手表</string>
+    <string name="watch_port">无线调试首页连接端口</string>
+    <string name="watch_install">安装到手表</string>
+    <string name="stop">停止当前操作</string>
+    <string name="open_health">打开小米运动健康</string>
+    <string name="open_companion">打开智在银河</string>
+    <string name="asset_error">内置安装包清单不可用，请重新安装助手。</string>
+    <string name="band_confirmed">手环已确认安装。打开小米运动健康恢复连接，再在手环上打开腕上银河并刷新车况。</string>
+    <string name="band_sent">完整版 RPK 已传完，手环尚未返回安装结果。请先查看手环应用列表，再打开小米运动健康恢复连接。</string>
+    <string name="watch_paired">已与手表配对。回到手表的无线调试首页，填写该页显示的连接端口。</string>
+    <string name="watch_confirmed">%1$s 已安装腕上银河。请在手表应用列表中打开并验证与智在银河的连接。</string>
+    <string name="watch_accepted">手表报告安装成功。请在手表应用列表检查腕上银河。</string>
+</resources>
