@@ -80,6 +80,7 @@ public final class MainActivity extends Activity {
     private TextView setupStatus;
     private TextView controlStatus;
     private TextView linkStatus;
+    private TextView connectedDevices;
     private ScrollView logScroll;
     private LinearLayout logRows;
     private String renderedLogs = "";
@@ -321,9 +322,12 @@ public final class MainActivity extends Activity {
         add(screen, backgroundPanel, 12);
 
         LinearLayout bandPanel = panel();
-        add(bandPanel, text("穿戴设备（可选）", 18, INK, true), 0);
+        add(bandPanel, text("穿戴设备", 18, INK, true), 0);
         linkStatus = text("", 14, MUTED, false);
         add(bandPanel, linkStatus, 4);
+        connectedDevices = text("", 14, INK, false);
+        connectedDevices.setLineSpacing(dp(3), 1f);
+        add(bandPanel, connectedDevices, 4);
         connection = button("启动通信", this::toggleService);
         add(bandPanel, connection, 12);
         authorize = button("授权小米设备通信", () -> app.link.authorize());
@@ -472,7 +476,7 @@ public final class MainActivity extends Activity {
     private void renderWearableThemePreview(ZonedDateTime now, ThemeConfig.Variant system) {
         ThemeConfig config = app.wearableTheme();
         ThemeConfig.Variant active = config.activeVariant(now, system);
-        String asset = config.asset(active);
+        String asset = config.wearableAsset(active);
         boolean previewHasArtwork = ThemeArtwork.show(themeImage, asset, 0);
         themePreviewShade.setBackground(previewHasArtwork
                 ? new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[]{0xc40d1724, 0x880d1724, 0x1a0d1724})
@@ -491,6 +495,9 @@ public final class MainActivity extends Activity {
         String link = app.link.status();
         String compact = WearDiagnostics.compactLinkStatus(link, app.hasService());
         linkStatus.setText(compact);
+        List<String> devices = app.link.connectedDevices();
+        connectedDevices.setText(String.join("\n", devices));
+        connectedDevices.setVisibility(devices.isEmpty() ? View.GONE : View.VISIBLE);
         connection.setText(app.hasService() ? "停止通信" : "启动通信");
         connection.setActivated(!app.hasService());
         boolean showAuthorize = app.link.canAuthorize() || app.link.isAuthorizing();

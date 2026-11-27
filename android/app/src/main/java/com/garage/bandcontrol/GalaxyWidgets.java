@@ -500,8 +500,7 @@ class GalaxyWidgets {
             ControlDirection direction = button.match() == null ? null : button.match().direction();
             if (action == CarAction.LOCK) {
                 lockState = binding.lockState();
-                blockedReason = LockControl.blockedReason(card.validReading, card.latest.motion(), lockState)
-                        .replace("银河", config.name);
+                blockedReason = LockControl.blockedReason(lockState);
                 direction = ControlDirection.forLockState(lockState);
                 if (direction == ControlDirection.UNLOCK) title = "解锁车门";
                 if (direction == ControlDirection.LOCK) title = "上锁车门";
@@ -511,14 +510,13 @@ class GalaxyWidgets {
                 blockedReason = decision.blockedReason();
                 if (direction == ControlDirection.CLOSE) title = "关闭车窗";
             } else if (action.isSwitch()) {
-                if (!card.validReading) blockedReason = "请刷新" + config.name + "卡片，核对" + action.label + "开关状态";
-                else if (direction == null) blockedReason = "请在手机核对" + action.label + "开关状态";
+                if (direction == null) blockedReason = "请在手机核对" + action.label + "开关状态";
                 else title = (direction == ControlDirection.OPEN ? "开启" : "关闭") + action.label;
             }
             Target target = new Target(card.id, button, title, lockState, direction);
             boolean unknown = !blockedReason.isEmpty()
                     && (action == CarAction.LOCK || action.isWindow() || action.isSwitch())
-                    && (!card.validReading || direction == null);
+                    && direction == null;
             live.put(action, new Control(target, blockedReason, unknown ? "unknown" : "", ""));
             liveSlots.put(button.slot(), action);
         }

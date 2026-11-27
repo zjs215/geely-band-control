@@ -175,5 +175,8 @@ test('lite disables local settings and syncs haptics and two-page display from p
 
   link.page.select('climate')
   assert.deepEqual(link.pulses, ['short'])
+
+  const liteSource = readFileSync(path.join(__dirname, '../src/pages/garage/lite.ux'), 'utf8')
+  assert.equal(/focusable=|enableswipe=|position:\s*absolute|letter-spacing:|transform:/.test(liteSource), false)
   assert.equal(existsSync(path.join(__dirname, '../dist/com.garage.bandcontrol.lite.' + require('../src/manifest.json').versionName + '.rpk')), true)
 })

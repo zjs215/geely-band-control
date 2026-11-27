@@ -63,6 +63,9 @@ final class XiaomiLink {
         @Override public void onServiceDisconnected() {
             main.post(() -> {
                 if (!active) return;
+                lastPollResult = pollSequence;
+                connectedDevices = List.of();
+                setStatus("等待小米运动健康连接");
                 diagnostics.log("小米穿戴服务连接断开", "小米运动健康服务可能被系统回收或重启", true);
             });
         }
@@ -77,11 +80,14 @@ final class XiaomiLink {
     private boolean authorizing;
     private int generation;
     private int authorizeGeneration;
+    private int pollSequence;
+    private int lastPollResult;
     private String status = "通信服务未启动";
     private String environmentSummary = "未检查";
     private String lastPollError = "";
     private String lastCheckError = "";
     private String lastNodeSignature = "";
+    private List<String> connectedDevices = List.of();
     private boolean emptyNodesLogged;
     private boolean preferBluetoothWatch;
 
@@ -101,6 +107,10 @@ final class XiaomiLink {
 
     String status() {
         return status;
+    }
+
+    List<String> connectedDevices() {
+        return connectedDevices;
     }
 
     String environmentSummary() {
@@ -234,6 +244,7 @@ final class XiaomiLink {
         permissionNeeded.clear();
         registering.clear();
         checkedWearApp.clear();
+        connectedDevices = List.of();
         setStatus("通信服务未启动");
     }
 
@@ -293,40 +304,50 @@ final class XiaomiLink {
     private void poll() {
         if (!active) return;
         int requestGeneration = generation;
+        int sequence = ++pollSequence;
         try {
             nodes.getConnectedNodes()
                     .addOnSuccessListener(result -> main.post(() -> {
-                        if (active && generation == requestGeneration) updateNodes(result, requestGeneration);
+                        if (!acceptPollResult(requestGeneration, sequence)) return;
+                        updateNodes(result, requestGeneration);
                     }))
                     .addOnFailureListener(error -> main.post(() -> {
-                        if (!active || generation != requestGeneration) return;
-                        String detail = WearDiagnostics.describeSdkError(error);
-                        if (!detail.equals(lastPollError)) {
-                            lastPollError = detail;
-                            Log.w(TAG, "getConnectedNodes failed: " + detail, error);
-                            diagnostics.log("获取小米穿戴设备失败", detail, true);
-                        }
-                        setStatus("等待小米运动健康连接");
+                        if (acceptPollResult(requestGeneration, sequence)) pollFailed(error);
                     }));
         } catch (RuntimeException unavailable) {
-            String detail = WearDiagnostics.describeSdkError(unavailable);
-            if (!detail.equals(lastPollError)) {
-                lastPollError = detail;
-                diagnostics.log("读取小米穿戴设备异常", detail, true);
-            }
-            setStatus("等待小米运动健康连接");
+            if (acceptPollResult(requestGeneration, sequence)) pollFailed(unavailable);
         }
         main.postDelayed(poll, 5_000);
+    }
+
+    private boolean acceptPollResult(int requestGeneration, int sequence) {
+        if (!active || generation != requestGeneration || sequence <= lastPollResult) return false;
+        lastPollResult = sequence;
+        return true;
+    }
+
+    private void pollFailed(Throwable error) {
+        connectedDevices = List.of();
+        String detail = WearDiagnostics.describeSdkError(error);
+        if (!detail.equals(lastPollError)) {
+            lastPollError = detail;
+            Log.w(TAG, "getConnectedNodes failed: " + detail, error);
+            diagnostics.log("获取小米穿戴设备失败", detail, true);
+        }
+        setStatus("等待小米运动健康连接");
     }
 
     private void updateNodes(Iterable<Node> result, int requestGeneration) {
         lastPollError = "";
         Set<String> current = new HashSet<>();
         List<String> labels = new ArrayList<>();
+        List<String> devices = new ArrayList<>();
         for (Node node : result) {
-            if (node != null && node.id != null && !node.id.isEmpty()) {
-                current.add(node.id);
-                labels.add(WearDiagnostics.formatNodeLabel(node.id, node.name));
+            if (node != null && node.id != null && !node.id.isEmpty() && current.add(node.id)) {
+                String label = WearDiagnostics.formatNodeLabel(node.id, node.name);
+                labels.add(label);
+                String name = node.name == null ? "" : node.name.trim();
+                devices.add((name.isEmpty() ? "小米穿戴设备 (" + label + ")" : name) + " · 小米运动健康");
             }
         }
         for (String previous : connected) {
@@ -343,6 +364,8 @@ final class XiaomiLink {
         permissionNeeded.retainAll(current);
         registering.retainAll(current);
         checkedWearApp.retainAll(current);
+        devices.sort(String::compareTo);
+        updateConnectedDevices(devices);
         if (current.isEmpty()) {
             lastNodeSignature = "";
             if (!emptyNodesLogged) {
@@ -445,8 +468,13 @@ final class XiaomiLink {
     }
 
     private void setStatus(String value) {
-        if (status.equals(value)) return;
         status = value;
+        onChange.run();
+    }
+
+    private void updateConnectedDevices(List<String> devices) {
+        if (connectedDevices.equals(devices)) return;
+        connectedDevices = List.copyOf(devices);
         onChange.run();
     }
 }

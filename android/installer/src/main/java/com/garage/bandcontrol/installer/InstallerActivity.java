@@ -8,15 +8,21 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothSocket;
+import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.location.LocationManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.DocumentsContract;
+import android.text.Editable;
 import android.text.InputType;
+import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -34,20 +40,26 @@ import android.widget.TextView;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 public final class InstallerActivity extends Activity {
     private static final int REQUEST_BLUETOOTH = 1;
+    private static final int REQUEST_LOG_ZIP = 2;
+    private static final int REQUEST_LOG_FOLDER = 3;
+    private static final String LOG_SETTINGS = "mi-fitness-log";
+    private static final String LOG_FOLDER_URI = "folder";
+    private static final String LOG_BAND_ADDRESS = "lastBandAddress";
     private static final int COLOR_BACKGROUND = 0xff111817;
     private static final int COLOR_SURFACE = 0xff202b29;
     private static final int COLOR_TEXT = 0xfff1faf7;
@@ -67,6 +79,11 @@ public final class InstallerActivity extends Activity {
     private LinearLayout watchPanel;
     private EditText address;
     private EditText authKey;
+    private TextView logStatus;
+    private Button folderButton;
+    private Uri logFolder;
+    private WearableLog.Keys importedKeys;
+    private boolean usingPickedZip;
     private EditText watchIp;
     private EditText watchPairPort;
     private EditText watchPairCode;
@@ -75,6 +92,7 @@ public final class InstallerActivity extends Activity {
     private ProgressBar progress;
     private Button cancel;
     private Runnable afterPermission;
+    private NearbyBandPicker nearbyBandPicker;
     private Operation current;
 
     @Override
@@ -85,6 +103,8 @@ public final class InstallerActivity extends Activity {
         } catch (IOException ignored) {
             // Keep the screen available to show the package error.
         }
+        String savedFolder = getSharedPreferences(LOG_SETTINGS, MODE_PRIVATE).getString(LOG_FOLDER_URI, "");
+        if (!savedFolder.isEmpty()) logFolder = Uri.parse(savedFolder);
         createScreen();
     }
 
@@ -144,9 +164,28 @@ public final class InstallerActivity extends Activity {
     private void createBandControls() {
         if (packages != null) add(bandPanel, packageText(R.string.band_package, packages.band), 0);
         add(bandPanel, text(getString(R.string.band_guide), 15, COLOR_SECONDARY), 8);
-        add(bandPanel, button(R.string.band_device, false, () -> withBluetooth(this::pickBand)), 10);
+        add(bandPanel, button(R.string.band_import_log, false, () -> chooseLog(false)), 10);
+        folderButton = button(logFolder == null ? R.string.band_select_log_folder : R.string.band_change_log_folder,
+                false, () -> chooseLog(true));
+        add(bandPanel, folderButton, 4);
+        add(bandPanel, button(R.string.band_nearby, false, () -> withBluetooth(true, this::searchBand)), 4);
+        add(bandPanel, button(R.string.band_device, false, () -> withBluetooth(this::pickBand)), 4);
         address = input(R.string.band_address, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        if (logFolder != null) {
+            address.setText(getSharedPreferences(LOG_SETTINGS, MODE_PRIVATE).getString(LOG_BAND_ADDRESS, ""));
+        }
         add(bandPanel, address, 4);
+        logStatus = text("", 14, COLOR_ACCENT);
+        logStatus.setVisibility(View.GONE);
+        logStatus.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        add(bandPanel, logStatus, 4);
+        address.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence text, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence text, int start, int before, int count) {
+                refreshLogStatus();
+            }
+            @Override public void afterTextChanged(Editable text) {}
+        });
         authKey = input(R.string.band_auth_key, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         authKey.setSaveEnabled(false);
         authKey.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
@@ -184,11 +223,116 @@ public final class InstallerActivity extends Activity {
                 () -> launch(new String[]{BundledPackages.APP_PACKAGE}, "手机上未找到智在银河")), 4);
     }
 
+    @SuppressWarnings("deprecation")
+    private void chooseLog(boolean chooseFolder) {
+        Intent picker = new Intent(chooseFolder ? Intent.ACTION_OPEN_DOCUMENT_TREE : Intent.ACTION_OPEN_DOCUMENT);
+        picker.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        picker.putExtra(DocumentsContract.EXTRA_INITIAL_URI, LogDocuments.INITIAL_FOLDER);
+        if (chooseFolder) {
+            picker.addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        } else {
+            picker.addCategory(Intent.CATEGORY_OPENABLE).setType("*/*");
+            picker.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{
+                    "application/zip", "application/x-zip-compressed", "application/octet-stream"});
+        }
+        try {
+            startActivityForResult(picker, chooseFolder ? REQUEST_LOG_FOLDER : REQUEST_LOG_ZIP);
+        } catch (ActivityNotFoundException unavailable) {
+            setStatus("手机上没有可用的系统文件选择器。");
+        }
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if ((request != REQUEST_LOG_ZIP && request != REQUEST_LOG_FOLDER)
+                || result != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        boolean folder = request == REQUEST_LOG_FOLDER;
+        if (folder) {
+            try {
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } catch (SecurityException | IllegalArgumentException denied) {
+                setStatus("系统未授予持续访问权限。可以直接选择日志 ZIP 导入。");
+                return;
+            }
+            Uri previous = logFolder;
+            logFolder = uri;
+            getSharedPreferences(LOG_SETTINGS, MODE_PRIVATE).edit().putString(LOG_FOLDER_URI, uri.toString()).apply();
+            folderButton.setText(R.string.band_change_log_folder);
+            if (previous != null && !previous.equals(uri)) {
+                try {
+                    getContentResolver().releasePersistableUriPermission(previous, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                } catch (SecurityException alreadyRevoked) {
+                    // The previous grant can also be removed in system settings.
+                }
+            }
+            usingPickedZip = false;
+        }
+        readLog(uri, folder, false);
+    }
+
+    private void readLog(Uri source, boolean folder, boolean installAfter) {
+        runOperation("正在读取小米运动健康日志", "无法读取日志，请重新选择运动健康导出的 ZIP。", 60,
+                true, operation -> {
+                    Uri file = folder ? LogDocuments.latestZip(getContentResolver(), source) : source;
+                    try (InputStream stream = getContentResolver().openInputStream(file)) {
+                        if (stream == null) throw new InstallFailure("无法打开日志 ZIP，请重新选择文件。");
+                        operation.attach(stream);
+                        return WearableLog.read(stream);
+                    }
+                },
+                keys -> {
+                    if (importedKeys != null) importedKeys.close();
+                    importedKeys = keys;
+                    usingPickedZip = !folder;
+                    authKey.setText("");
+                    String selectedBefore = WearableLog.address(value(address));
+                    if (value(address).trim().isEmpty()) {
+                        String unique = keys.uniqueAddress();
+                        if (!unique.isEmpty()) address.setText(unique);
+                    }
+                    refreshLogStatus();
+                    if (installAfter && keys.matches(selectedBefore)) {
+                        installBand(false);
+                    } else {
+                        setStatus(logStatus.getText().toString());
+                    }
+                }, WearableLog.Keys::close);
+    }
+
+    private void refreshLogStatus() {
+        if (importedKeys == null) {
+            logStatus.setVisibility(View.GONE);
+            return;
+        }
+        String selected = WearableLog.address(value(address));
+        logStatus.setText(selected.isEmpty() ? R.string.band_log_select_device
+                : importedKeys.matches(selected) ? R.string.band_match_log : R.string.band_log_no_match);
+        logStatus.setVisibility(View.VISIBLE);
+    }
+
     private void withBluetooth(Runnable action) {
-        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT)
+        withBluetooth(false, action);
+    }
+
+    private void withBluetooth(boolean scan, Runnable action) {
+        List<String> missing = new ArrayList<>();
+        if (Build.VERSION.SDK_INT >= 31) {
+            if (checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_CONNECT);
+            }
+            if (scan && checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                missing.add(Manifest.permission.BLUETOOTH_SCAN);
+            }
+        } else if (scan && checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION)
                 != PackageManager.PERMISSION_GRANTED) {
+            missing.add(Manifest.permission.ACCESS_FINE_LOCATION);
+        }
+        if (!missing.isEmpty()) {
             afterPermission = action;
-            requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT}, REQUEST_BLUETOOTH);
+            requestPermissions(missing.toArray(new String[0]), REQUEST_BLUETOOTH);
             return;
         }
         action.run();
@@ -200,11 +344,35 @@ public final class InstallerActivity extends Activity {
         if (requestCode != REQUEST_BLUETOOTH) return;
         Runnable action = afterPermission;
         afterPermission = null;
-        if (results.length > 0 && results[0] == PackageManager.PERMISSION_GRANTED && action != null) {
+        if (results.length > 0 && Arrays.stream(results).allMatch(grant -> grant == PackageManager.PERMISSION_GRANTED)
+                && action != null) {
             action.run();
         } else {
-            setStatus("请在系统设置中允许「附近设备」权限后重试。");
+            setStatus(Build.VERSION.SDK_INT >= 31 ? "请在系统设置中允许「附近设备」权限后重试。"
+                    : "此安卓版本需要位置权限才能搜索蓝牙设备。");
         }
+    }
+
+    private void searchBand() {
+        BluetoothAdapter adapter = bluetooth();
+        if (adapter == null) return;
+        if (Build.VERSION.SDK_INT <= 30) {
+            LocationManager location = getSystemService(LocationManager.class);
+            if (location != null && !location.isLocationEnabled()) {
+                setStatus("请打开手机的位置开关，再搜索附近的手环。");
+                return;
+            }
+        }
+        if (nearbyBandPicker != null) nearbyBandPicker.close();
+        nearbyBandPicker = new NearbyBandPicker(this, adapter, WearableLog.address(value(address)), mac -> {
+            address.setText(mac);
+            if (importedKeys != null) {
+                setStatus(logStatus.getText().toString());
+            } else {
+                setStatus("已选定手环。可点「安装到手环」继续。");
+            }
+        });
+        nearbyBandPicker.show();
     }
 
     @SuppressLint("MissingPermission")
@@ -249,20 +417,37 @@ public final class InstallerActivity extends Activity {
 
     @SuppressLint("MissingPermission")
     private void installBand() {
+        installBand(true);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void installBand(boolean readLatest) {
         if (packages == null || current != null) return;
+        String manual = value(authKey).trim();
+        if (readLatest && manual.isEmpty() && logFolder != null && !usingPickedZip) {
+            readLog(logFolder, true, true);
+            return;
+        }
         BluetoothAdapter adapter = bluetooth();
         if (adapter == null) return;
-        String mac = value(address).trim().toUpperCase(Locale.ROOT);
-        if (!BluetoothAdapter.checkBluetoothAddress(mac)) {
+        String mac = WearableLog.address(value(address));
+        if (mac.isEmpty()) {
             address.setError("请输入有效的手环蓝牙地址");
             return;
         }
         byte[] key;
         try {
-            key = BandProtocol.parseKey(value(authKey));
+            key = manual.isEmpty() && importedKeys != null ? importedKeys.copyFor(mac) : BandProtocol.parseKey(manual);
         } catch (IllegalArgumentException invalid) {
-            authKey.setError(invalid.getMessage());
+            authKey.setError(manual.isEmpty() ? "请导入运动健康日志或填写 AuthKey" : invalid.getMessage());
             return;
+        }
+        if (key == null) {
+            setStatus(getString(R.string.band_log_no_match));
+            return;
+        }
+        if (manual.isEmpty() && logFolder != null && !usingPickedZip) {
+            getSharedPreferences(LOG_SETTINGS, MODE_PRIVATE).edit().putString(LOG_BAND_ADDRESS, mac).apply();
         }
         authKey.setText("");
         start("正在连接手环", "蓝牙安装失败。请核对手环地址、AuthKey 和蓝牙连接状态。", 160,
@@ -270,12 +455,18 @@ public final class InstallerActivity extends Activity {
                     try {
                         byte[] rpk = packages.verifiedBytes(packages.band);
                         BluetoothDevice device = adapter.getRemoteDevice(mac);
+                        if ((Build.VERSION.SDK_INT < 31 || checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN)
+                                == PackageManager.PERMISSION_GRANTED) && adapter.isDiscovering()) {
+                            adapter.cancelDiscovery();
+                        }
+                        awaitPairing(device, operation);
+                        operation.report("正在连接手环", -1);
                         try (BluetoothSocket socket = device.createRfcommSocketToServiceRecord(SERIAL_PORT)) {
                             operation.attach(socket);
                             try {
                                 socket.connect();
                             } catch (IOException connecting) {
-                                throw new IOException("未能连接手环。请核对地址，并确认小米运动健康没有占用蓝牙连接。", connecting);
+                                throw new InstallFailure("未能连接手环。请让手环停在「连接新手机」页面，在助手内重新搜索并选择它。", connecting);
                             }
                             try (BandWire wire = new BandWire(socket.getInputStream(), socket.getOutputStream())) {
                                 BandProtocol.Result result = new BandProtocol(wire).install(key,
@@ -288,6 +479,26 @@ public final class InstallerActivity extends Activity {
                         Arrays.fill(key, (byte) 0);
                     }
                 });
+    }
+
+    @SuppressLint("MissingPermission")
+    private static void awaitPairing(BluetoothDevice device, Operation operation)
+            throws InterruptedException, InstallFailure {
+        int state = device.getBondState();
+        if (state == BluetoothDevice.BOND_BONDED) return;
+        boolean bonding = state == BluetoothDevice.BOND_BONDING;
+        if (!bonding && !device.createBond()) return; // The RFCOMM connect path can request pairing too.
+
+        operation.report("等待系统蓝牙配对。请在手机和手环上按提示确认。", -1);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(40);
+        while (System.nanoTime() < deadline) {
+            state = device.getBondState();
+            if (state == BluetoothDevice.BOND_BONDED) return;
+            if (state == BluetoothDevice.BOND_NONE && bonding) break;
+            bonding |= state == BluetoothDevice.BOND_BONDING;
+            Thread.sleep(250);
+        }
+        throw new InstallFailure("系统蓝牙配对未完成。请打开手环的「连接新手机」页面后再试。");
     }
 
     private void pairWatch() {
@@ -306,7 +517,7 @@ public final class InstallerActivity extends Activity {
                         try (WatchAdb adb = new WatchAdb(getApplicationContext())) {
                             operation.attach(adb);
                             if (!adb.pair(ip, port, code)) {
-                                throw new IOException("手表拒绝配对，请重新获取配对码和配对端口。");
+                                throw new InstallFailure("手表拒绝配对，请重新获取配对码和配对端口。");
                             }
                             return getString(R.string.watch_paired);
                         }
@@ -350,53 +561,70 @@ public final class InstallerActivity extends Activity {
         setStatus(missing);
     }
 
-    private interface Work {
-        String run(Operation operation) throws Exception;
+    private interface Work<T> {
+        T run(Operation operation) throws Exception;
     }
 
-    private void start(String initial, String fallback, int seconds, Work work) {
+    private void start(String initial, String fallback, int seconds, Work<String> work) {
+        runOperation(initial, fallback, seconds, false, work, this::setStatus, ignored -> {});
+    }
+
+    private <T> void runOperation(String initial, String fallback, int seconds, boolean readingLog,
+                                  Work<T> work, Consumer<T> onSuccess, Consumer<T> onDiscard) {
         if (current != null) return;
         getSystemService(InputMethodManager.class).hideSoftInputFromWindow(content.getWindowToken(), 0);
-        Operation operation = new Operation();
+        Operation operation = new Operation(readingLog);
         current = operation;
         setBusy(true);
         setStatus(initial);
         operation.timer = deadlines.schedule(() -> operation.stop(true), seconds, TimeUnit.SECONDS);
         worker.execute(() -> {
             operation.thread = Thread.currentThread();
-            String message;
+            T value = null;
+            String error = null;
             try {
-                message = work.run(operation);
+                value = work.run(operation);
             } catch (Exception failure) {
-                message = failure instanceof IOException && hasChinese(failure.getMessage())
-                        ? failure.getMessage() : fallback;
+                error = failure instanceof InstallFailure ? failure.getMessage() : fallback;
             } finally {
                 operation.timer.cancel(false);
                 operation.connection = null;
                 operation.thread = null;
             }
-            String result = message;
+            T result = value;
+            String message = error;
             runOnUiThread(() -> {
-                if (current != operation || isDestroyed()) return;
+                if (current != operation || isDestroyed()) {
+                    if (result != null) onDiscard.accept(result);
+                    return;
+                }
                 current = null;
                 setBusy(false);
-                if (operation.timedOut) {
-                    setStatus("操作超时。请先在穿戴设备上查看安装状态。");
-                } else if (operation.stopped) {
-                    setStatus("已停止等待。若安装包已发送，请在穿戴设备上查看安装状态。");
+                if (operation.stopped) {
+                    if (result != null) onDiscard.accept(result);
+                    if (readingLog) setStatus(operation.timedOut ? "读取日志超时，请重新选择 ZIP。" : "已停止读取日志。");
+                    else if (operation.timedOut) setStatus("操作超时。请先在穿戴设备上查看安装状态。");
+                    else setStatus("已停止等待。若安装包已发送，请在穿戴设备上查看安装状态。");
+                } else if (message != null) {
+                    setStatus(message);
                 } else {
-                    setStatus(result);
+                    onSuccess.accept(result);
                 }
             });
         });
     }
 
     private final class Operation {
+        private final boolean readingLog;
         private volatile Thread thread;
         private volatile Closeable connection;
         private volatile boolean stopped;
         private volatile boolean timedOut;
         private ScheduledFuture<?> timer;
+
+        Operation(boolean readingLog) {
+            this.readingLog = readingLog;
+        }
 
         void attach(Closeable channel) throws InterruptedException {
             connection = channel;
@@ -416,6 +644,13 @@ public final class InstallerActivity extends Activity {
             if (stopped) return;
             stopped = true;
             timedOut = timeout;
+            runOnUiThread(() -> {
+                if (current == this && !isDestroyed()) {
+                    cancel.setEnabled(false);
+                    setStatus(readingLog ? "正在停止读取日志。"
+                            : timeout ? "连接超时，正在结束操作。" : "正在断开连接。");
+                }
+            });
             Thread running = thread;
             if (running != null) running.interrupt();
             Closeable channel = connection;
@@ -432,8 +667,18 @@ public final class InstallerActivity extends Activity {
     }
 
     @Override
+    protected void onStop() {
+        if (nearbyBandPicker != null) {
+            nearbyBandPicker.close();
+            nearbyBandPicker = null;
+        }
+        super.onStop();
+    }
+
+    @Override
     protected void onDestroy() {
         if (current != null) current.stop(false);
+        if (importedKeys != null) importedKeys.close();
         worker.shutdownNow();
         deadlines.shutdown();
         super.onDestroy();
@@ -445,6 +690,7 @@ public final class InstallerActivity extends Activity {
         setEnabled(watchPanel, !busy);
         progress.setIndeterminate(true);
         progress.setVisibility(busy ? View.VISIBLE : View.GONE);
+        cancel.setEnabled(busy);
         cancel.setVisibility(busy ? View.VISIBLE : View.GONE);
         if (busy) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -464,10 +710,6 @@ public final class InstallerActivity extends Activity {
         status.setText(message);
         status.setVisibility(message.isEmpty() ? View.GONE : View.VISIBLE);
         if (!message.isEmpty()) scroll.post(() -> scroll.smoothScrollTo(0, content.getHeight()));
-    }
-
-    private static boolean hasChinese(String text) {
-        return text != null && text.codePoints().anyMatch(point -> point >= 0x4e00 && point <= 0x9fff);
     }
 
     @SuppressWarnings("deprecation")

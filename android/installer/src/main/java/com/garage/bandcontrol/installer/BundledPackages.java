@@ -51,10 +51,10 @@ final class BundledPackages {
         byte[] data = new byte[source.size()];
         try (DataInputStream input = new DataInputStream(assets.open(ROOT + source.fileName()))) {
             input.readFully(data);
-            if (input.read() != -1) throw new IOException("内置安装包大小校验失败");
+            if (input.read() != -1) throw new InstallFailure("内置安装包大小校验失败");
         }
         if (!sha256(data).equals(source.sha256())) {
-            throw new IOException("内置安装包 SHA-256 校验失败，请重新安装助手");
+            throw new InstallFailure("内置安装包 SHA-256 校验失败，请重新安装助手");
         }
         return data;
     }

@@ -13,17 +13,18 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 
 项目原创代码和自绘素材采用 [Apache-2.0](LICENSE)。通信 SDK 和主题素材的来源见 [第三方说明](THIRD_PARTY_NOTICES.md)。
 
-## 下载 v0.2.10
+## 下载 v0.2.12
 
-手机、手环和 Watch 5 安装包均为 **0.2.10**，可覆盖安装同签名的旧版。
+手机、手环（含 Lite 版）和 Watch 5 安装包均为 **0.2.12**，可覆盖安装同签名的旧版；穿戴安装助手为 **0.1.1**。
 
 | 设备 | 安装包 |
 | --- | --- |
-| Android 手机 | [手机 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/galaxy-phone.apk) |
-| 小米手环 10 Pro / 9 Pro / 8 Pro、手环 10、支持 Vela RPK 的圆形手表 | [手环 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/galaxy-vela-band.rpk) |
-| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/galaxy-watch.apk) |
+| Android 手机 | [手机 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.12/galaxy-phone.apk) |
+| 小米手环 10 Pro / 9 Pro / 8 Pro、手环 10、支持 Vela RPK 的圆形手表 | [手环 RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.12/galaxy-vela-band.rpk) · [手环 Lite RPK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.12/galaxy-vela-band-lite.rpk) |
+| 支持 APK 侧载的小米 Watch 5 | [Watch 5 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.12/galaxy-watch.apk) |
+| Android 穿戴安装助手（内置完整版 RPK 与 Watch APK） | [安装助手 APK](https://github.com/zjs215/geely-band-control/releases/download/v0.2.12/galaxy-wear-installer.apk) |
 
-[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.2.10) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.2.10/SHA256SUMS.txt)
+[发布说明](https://github.com/zjs215/geely-band-control/releases/tag/v0.2.12) · [SHA-256 校验文件](https://github.com/zjs215/geely-band-control/releases/download/v0.2.12/SHA256SUMS.txt)
 
 ## 安装与首次验证
 
@@ -31,7 +32,7 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 2. 使用穿戴端时，先将设备与手机配对，再按设备选择安装包。
    - **Vela 手环或手表**可通过小米运动健康中的「我的 → 关于 → Debug → 第三方应用」安装 RPK，具体取决于运动健康版本。也可使用支持该设备的 AstroBox。[小米真机安装说明](https://iot.mi.com/vela/quickapp/zh/guide/other/faq.html) · [AstroBox RPK 安装说明](https://astrobox.usea.quest/docs/quick-app-installation.html)
    - **小米 Watch 5**在手表上开启开发者选项与无线 ADB 调试，再侧载 Watch 5 APK。手表通过已配对手机的蓝牙连接伴侣 App。
-3. 在手机的「穿戴设备（可选）」卡片点「启动通信」。使用小米运动健康通道时，按界面提示完成「授权小米设备通信」。使用蓝牙直连 Watch 5 时，按系统提示授予「附近设备」权限。
+3. 在手机的「穿戴设备」卡片点「启动通信」。使用小米运动健康通道时，按界面提示完成「授权小米设备通信」。使用蓝牙直连 Watch 5 时，按系统提示授予「附近设备」权限。当前连接的设备会显示在这张卡片上。
 4. 在手环或手表的应用列表打开「腕上银河」，核对续航和更新时间。点更新时间可刷新，也可以在双屏车控页上拉后松手刷新。
 
 三端包名均为 `com.garage.bandcontrol`。手机和 Vela 穿戴通信需要匹配的签名证书，建议使用同一发布版的安装包配对。[小米设备通信文档](https://iot.mi.com/vela/quickapp/zh/features/network/interconnect.html)
@@ -39,7 +40,7 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 ## 主题与手环布局
 
 - 手机首页调色盘打开「手机主题」，用于手机 App 的外观。选好场景后，可以跟随手机系统深浅色、按自定义时间切换，或固定日景、夜景。
-- 「穿戴设备 → 穿戴主题」单独设置下发给手环和手表的主题。选「跟随手机系统」后，穿戴端在同步车况时收到手机系统对应的日景或夜景。
+- 「穿戴设备 → 穿戴主题」单独设置下发给手环和手表的主题，可在保存前预览日景和夜景。选「跟随手机系统」后，穿戴端在同步车况时收到手机系统对应的日景或夜景。
 - 支持本机主题的穿戴端可在「设置 → 外观主题」选择跟随手机或独立场景。Watch 5 的本机主题可以跟随手表系统，跑道小屏手环使用手机下发的穿戴主题。
 - 手机的「手环布局」与支持单双屏切换的手环同步。双屏首页显示总续航、油电进度和车辆状态，第二屏显示车控。单屏纵向滚动，点车况区域可切换到油电分项。长方形和跑道屏手环的车控按钮单列排列。
 
@@ -62,9 +63,7 @@ Android 手机应用「**智在银河**」，支持**吉利银河**及**吉利�
 
 银河 App 1.59.0 的已上锁与已解锁图标均可自动识别。卡片显示已驻车时，闭锁图标对应手环的「解锁」，开锁图标对应「上锁」。卡片显示「车门未锁」且锁图标一致时，手环显示「上锁」。点击手环车锁可直接进入对应的操作确认，车况可在时间栏单独刷新。停止穿戴通信后，已开启的车控授权保持有效，仅手环/手表侧控制需要重新启动穿戴通信。
 
-手机 0.1.22 支持车窗、天窗、车门或后备箱未关闭提醒替代驻车文案时的车锁判断。有效车况和可识别的锁图标共同决定动作，明确行驶状态、未知状态和锁态冲突会被拦截。车锁诊断日志记录卡片原文、准备动作和锁态，便于区分状态拦截与官方回传过程。
-
-车窗直接依据官方卡片槽内识别出的图标方向判断开启或关窗（打开图标对应「窗微开」或「窗全开」，关闭图标对应「关窗」）；无法识别图标方向时，按钮显示暂不可用。
+车锁、车窗与开关类功能均直接依据官方卡片槽内识别出的图标方向判断动作（例如「解锁／上锁」「窗微开／窗全开／关窗」「开空调／关空调」），不再被卡片告警文案或读数时间额外拦截，实际车辆条件由官方服务端校验；无法识别图标方向时，按钮显示暂不可用。车锁诊断日志保留卡片原文、准备动作和锁态，便于核对官方回传过程。
 
 空调、净化、极速升温、极速降温、除霜和哨兵模式按当前官方按钮的图标切换开关文案，例如「开空调／关空调」「开净化／关净化」。确认页显示完整动作，例如「关闭极速降温」。手环把显示的方向带入确认请求，手机在准备和执行时核对当前槽位、图标指纹及方向，状态变化后需重新选择。寻车和后备箱继续使用对应的官方按钮。具体车型的组件远程关后备箱及支持的功能槽位以吉利银河官方配置为准。
 

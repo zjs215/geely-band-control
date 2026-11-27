@@ -115,6 +115,13 @@ public record ThemeConfig(Scene scene, Mode mode, Variant variant, int dayStartM
         return scene == Scene.CLASSIC ? "" : "themes/" + id(scene) + "-" + id(active) + ".webp";
     }
 
+    public String wearableAsset(Variant active) {
+        if (active == Variant.DAY && scene != Scene.CLASSIC) {
+            return "themes/wearable/" + id(scene) + "-day.webp";
+        }
+        return asset(active);
+    }
+
     public String summary(Variant active, String systemLabel) {
         if (scene == Scene.CLASSIC) return scene.title;
         String source = switch (mode) {

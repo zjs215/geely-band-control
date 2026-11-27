@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 0.2.12
+
+- 手机 APK、Watch APK 和手环 RPK（含 Lite 版）统一升级为 0.2.12（`versionCode` 49），配套穿戴安装助手升级为 `0.1.1`（`versionCode` 2）。
+- 新增极氪官方大卡适配（支持总续航、油电分项续航、明确带百分号电量、充电提示、更新时间与米家 `ZEEKR_V1:TEST`），并新增已连接穿戴设备名展示与连接链路优化。
+- 新增圆屏/方盘「双屏显示」开关（默认双屏，可切换单屏；单屏 4 按钮支持 `2×2` 网格），并优化 3 按钮横向单行（`1×3`）排布与二屏/设置页紧凑排版及返回图标。
+- 修复 Watch APK 设置页侧滑直接退出应用的问题：禁用窗口 `windowSwipeToDismiss`、按页面状态动态注册 Android 13+ `OnBackInvokedCallback`，并在设置页/确认浮层补齐右滑返回（Vela 端同步补充 `@swipe` 右滑拦截）。
+- 去除车锁（`LockControl`）和开关类功能（空调、极速升降温、净化、除霜、哨兵模式）的车况文本与读数拦截，统一按图标方向直接发送请求（如充电场景），交由官方服务端校验。
+- 整理穿戴主题日景素材并补充主题设置实时日夜预览，完善 `galaxy-vela-band-lite.rpk` 与 `galaxy-wear-installer.apk` 打包集成。
+
 ## 0.2.10
 
 - 手机 APK、Watch APK 和手环 RPK 统一升级为 0.2.10（`versionCode` 47）。

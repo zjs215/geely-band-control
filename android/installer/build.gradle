@@ -22,8 +22,8 @@ android {
         applicationId 'com.garage.bandcontrol.installer'
         minSdk 28
         targetSdk 35
-        versionCode 1
-        versionName '0.1.0'
+        versionCode 3
+        versionName '0.1.2'
     }
 
     sourceSets.main.assets.srcDir assetsDir
@@ -113,4 +113,5 @@ dependencies {
     implementation 'com.github.osservatorionessuno:libadb-android-bc:3.5.1'
     implementation 'org.bouncycastle:bcpkix-jdk15to18:1.84'
     testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

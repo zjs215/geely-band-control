@@ -8,6 +8,8 @@
 | Android Gradle Plugin | Google Maven 下载，Apache-2.0，固定版本见 `android/build.gradle` |
 | JUnit 4 | 测试依赖，EPL-1.0，版本见 `android/app/build.gradle` |
 | JSON-java | 测试依赖，版本 20240303，使用该版本上游许可证 |
+| minstall | 安装助手的手环协议实现参考 0.2.0 版，保留 MIT 许可与版权声明 |
+| libadb-android-bc、Bouncy Castle | 安装助手的无线 ADB 和加密依赖，分别固定 3.5.1 和 1.84。libadb-android-bc 采用上游提供的 Apache-2.0 授权选项，保留组件各自的许可证 |
 | AIoT Toolkit | npm 的 `aiot-toolkit` 2.0.5 及传递依赖，锁文件保留版本、完整性和许可证信息。使用时遵循各包许可证 |
 | 小米 Wearable SDK | 官方通信样例内 `xms-wearable-lib_1.4_release.aar`。源码仓库通过构建脚本从官方源取得并校验，不附带该二进制。当前尚未确认独立再分发授权，公开包含该 SDK 的 APK 前需核对小米许可 |
 | 银河官方卡片 | 通过 Android AppWidgetHost 托管用户已安装 App 提供的 RemoteViews。官方 App、图标、车图和反编译实现由各自权利人持有 |

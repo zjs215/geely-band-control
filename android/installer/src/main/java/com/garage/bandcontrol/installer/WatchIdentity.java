@@ -71,7 +71,7 @@ record WatchIdentity(PrivateKey key, X509Certificate certificate) {
         WatchIdentity identity = create();
         String encrypted = Base64.encodeToString(identity.encode(wrappingKey), Base64.NO_WRAP);
         if (!preferences.edit().putString(IDENTITY, encrypted).commit()) {
-            throw new IOException("无法保存手表配对凭据");
+            throw new InstallFailure("无法保存手表配对凭据");
         }
         return identity;
     }

@@ -2,6 +2,7 @@ package com.garage.bandcontrol.installer;
 
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.modes.CCMBlockCipher;
+import org.bouncycastle.crypto.modes.CCMModeCipher;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
 
@@ -13,7 +14,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
-import java.util.ArrayDeque;
 import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +46,7 @@ final class BandProtocol {
     }
 
     private final BandWire wire;
-    private final ArrayDeque<BandMessages.Response> receivedDuringTransfer = new ArrayDeque<>();
+    private BandMessages.Response receivedDuringTransfer;
     private int sequence;
     private byte[] toBandKey;
     private byte[] fromBandKey;
@@ -116,7 +116,7 @@ final class BandProtocol {
 
         byte[] expectedProof = hmac(fromBandKey, BandMessages.join(challenge.nonce(), phoneNonce));
         if (!MessageDigest.isEqual(expectedProof, challenge.hmac())) {
-            throw new IOException("手环认证失败，请核对当前绑定的 AuthKey");
+            throw new InstallFailure("手环认证失败，请核对当前绑定的 AuthKey");
         }
         byte[] phoneProof = hmac(toBandKey, BandMessages.join(phoneNonce, challenge.nonce()));
         String region = Locale.getDefault().getCountry();
@@ -133,12 +133,12 @@ final class BandProtocol {
     private void sendPackage(byte[] rpk, byte[] contentId, int sliceLength, Progress progress)
             throws Exception {
         if (sliceLength <= TRANSFER_HEADER || sliceLength > 0xffff) {
-            throw new IOException("手环返回了无效的传输分片长度");
+            throw new InstallFailure("手环返回了无效的传输分片长度");
         }
         byte[] content = envelope(rpk, contentId);
         int chunkSize = sliceLength - TRANSFER_HEADER;
         int chunks = (content.length + chunkSize - 1) / chunkSize;
-        if (chunks > 0xffff) throw new IOException("安装包超出手环传输限制");
+        if (chunks > 0xffff) throw new InstallFailure("安装包超出手环传输限制");
         progress.report("正在发送完整版 RPK", 0);
         for (int chunk = 0; chunk < chunks;) {
             int windowEnd = Math.min(chunk + PACKETS_PER_WINDOW, chunks);
@@ -154,9 +154,9 @@ final class BandProtocol {
             int lastSequence = (sequence - 1) & 0xff;
             await(10, "手环未确认收到安装包分片", frame -> {
                 BandMessages.Response response = response(frame);
-                if (response != null && response.type() == BandMessages.APP
+                if (receivedDuringTransfer == null && response != null && response.type() == BandMessages.APP
                         && response.action() == BandMessages.INSTALL_RESULT && response.status() >= 0) {
-                    receivedDuringTransfer.addLast(response);
+                    receivedDuringTransfer = response;
                 }
                 return frame.type() == BandWire.ACK && frame.sequence() == lastSequence ? Boolean.TRUE : null;
             });
@@ -176,7 +176,7 @@ final class BandProtocol {
     private BandMessages.Response awaitResponse(int type, int action, int seconds, String timeout)
             throws Exception {
         if (type == BandMessages.APP && action == BandMessages.INSTALL_RESULT
-                && !receivedDuringTransfer.isEmpty()) return receivedDuringTransfer.removeFirst();
+                && receivedDuringTransfer != null) return receivedDuringTransfer;
         return await(seconds, timeout, frame -> {
             BandMessages.Response result = response(frame);
             return result != null && result.type() == type && result.action() == action && result.status() >= 0
@@ -211,8 +211,8 @@ final class BandProtocol {
         sequence = (sequence + 1) & 0xff;
     }
 
-    private static void requireAccepted(BandMessages.Response result, String description) throws IOException {
-        if (result.status() != 0) throw new IOException(description + "（设备代码 " + result.status() + "）");
+    private static void requireAccepted(BandMessages.Response result, String description) throws InstallFailure {
+        if (result.status() != 0) throw new InstallFailure(description + "（设备代码 " + result.status() + "）");
     }
 
     private interface Decoder<T> {
@@ -226,7 +226,7 @@ final class BandProtocol {
             try {
                 frame = wire.receive(deadline);
             } catch (SocketTimeoutException error) {
-                throw new SocketTimeoutException(timeout);
+                throw new InstallFailure(timeout, error);
             }
             T match = decoder.decode(frame);
             if (match != null) return match;
@@ -267,8 +267,11 @@ final class BandProtocol {
     }
 
     static byte[] encryptDeviceInfo(byte[] key, byte[] nonce, byte[] data) throws Exception {
-        CCMBlockCipher cipher = new CCMBlockCipher(AESEngine.newInstance());
+        CCMModeCipher cipher = CCMBlockCipher.newInstance(AESEngine.newInstance());
         cipher.init(true, new AEADParameters(new KeyParameter(key), 32, nonce));
-        return cipher.processPacket(data, 0, data.length);
+        byte[] output = new byte[cipher.getOutputSize(data.length)];
+        int written = cipher.processBytes(data, 0, data.length, output, 0);
+        written += cipher.doFinal(output, written);
+        return written == output.length ? output : Arrays.copyOf(output, written);
     }
 }

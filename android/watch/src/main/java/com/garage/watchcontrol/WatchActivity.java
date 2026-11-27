@@ -2249,7 +2249,7 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
     private void renderTheme(ZonedDateTime now) {
         ThemeConfig active = activeTheme();
         ThemeConfig.Variant variant = active.activeVariant(now, ThemeStyles.systemVariant(this));
-        boolean hasArtwork = ThemeArtwork.show(themeBackdrop, active.asset(variant),
+        boolean hasArtwork = ThemeArtwork.show(themeBackdrop, active.wearableAsset(variant),
                 variant == ThemeConfig.Variant.DAY ? 0x1fe7eff4 : 0x1a0d1626);
         ThemeConfig.Variant next = hasArtwork ? variant : null;
         ThemeStyles.Palette palette = ThemeStyles.forVariant(next);

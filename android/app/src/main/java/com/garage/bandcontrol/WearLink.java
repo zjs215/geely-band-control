@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Handler;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.function.Consumer;
 
 final class WearLink {
@@ -15,6 +17,9 @@ final class WearLink {
     private final Runnable onChange;
     private boolean preferBluetoothWatch;
     private String lastStatus = "通信服务未启动";
+    private List<String> connectedDevices = List.of();
+    private boolean lastCanAuthorize;
+    private boolean lastAuthorizing;
 
     WearLink(Context context, Handler main, XiaomiLink.Receiver receiver,
              Consumer<String> onDisconnect, Runnable onChange, XiaomiLink.DiagnosticSink diagnostics) {
@@ -28,6 +33,10 @@ final class WearLink {
 
     String status() {
         return lastStatus;
+    }
+
+    List<String> connectedDevices() {
+        return connectedDevices;
     }
 
     String diagnosticSummary() {
@@ -82,8 +91,16 @@ final class WearLink {
         }
         xiaomi.setPreferBluetoothWatch(preferBluetoothWatch);
         String combined = combineStatus(x, bluetoothWatch.status(), btConnected, preferBluetoothWatch);
-        if (combined.equals(lastStatus)) return;
+        List<String> devices = new ArrayList<>(xiaomi.connectedDevices());
+        devices.addAll(bluetoothWatch.connectedDevices());
+        boolean canAuthorize = canAuthorize();
+        boolean authorizing = isAuthorizing();
+        if (combined.equals(lastStatus) && devices.equals(connectedDevices)
+                && canAuthorize == lastCanAuthorize && authorizing == lastAuthorizing) return;
         lastStatus = combined;
+        connectedDevices = List.copyOf(devices);
+        lastCanAuthorize = canAuthorize;
+        lastAuthorizing = authorizing;
         onChange.run();
     }
 

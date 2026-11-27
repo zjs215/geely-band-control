@@ -4,9 +4,9 @@ import android.content.Context;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.PrivateKey;
 import java.security.cert.Certificate;
@@ -40,13 +40,13 @@ final class WatchAdb extends AbsAdbConnectionManager {
             throws Exception {
         progress.report("正在连接手表的无线调试端口", -1);
         try {
-            if (!connect(ip, port)) throw new IOException("连接手表超时，请核对无线调试连接端口");
+            if (!connect(ip, port)) throw new InstallFailure("连接手表超时，请核对无线调试连接端口");
         } catch (AdbPairingRequiredException pairing) {
-            throw new IOException("请先在手表上完成无线调试配对", pairing);
+            throw new InstallFailure("请先在手表上完成无线调试配对", pairing);
         }
         String model = command("getprop ro.product.model").trim();
         String features = command("pm list features");
-        if (!isWatch(model, features)) throw new IOException("连接的设备未被识别为 Android 手表");
+        if (!isWatch(model, features)) throw new InstallFailure("连接的设备未被识别为 Android 手表");
 
         progress.report("正在发送手表 APK", 0);
         String response;
@@ -60,10 +60,10 @@ final class WatchAdb extends AbsAdbConnectionManager {
             }
             output.flush();
             progress.report("等待手表确认安装", -1);
-            response = readReply(stream.openInputStream());
+            response = readReply(stream);
         }
         if (!Arrays.asList(response.replace("\r", "").split("\n")).contains("Success")) {
-            throw new IOException(describeInstallFailure(response));
+            throw new InstallFailure(describeInstallFailure(response));
         }
         final String expected = "package:" + BundledPackages.APP_PACKAGE + " versionCode:" + versionCode;
         try {
@@ -76,7 +76,7 @@ final class WatchAdb extends AbsAdbConnectionManager {
 
     private String command(String command) throws Exception {
         try (AdbStream stream = openStream("shell:" + command)) {
-            return readReply(stream.openInputStream());
+            return readReply(stream);
         }
     }
 
@@ -85,12 +85,12 @@ final class WatchAdb extends AbsAdbConnectionManager {
                 || Arrays.asList(featureList.replace("\r", "").split("\n")).contains(WATCH_FEATURE);
     }
 
-    private static String readReply(InputStream input) throws IOException {
+    private static String readReply(AdbStream stream) throws IOException {
         ByteArrayOutputStream reply = new ByteArrayOutputStream();
         byte[] buffer = new byte[1024];
         int length;
-        while ((length = input.read(buffer)) != -1) {
-            if (length > MAX_REPLY_SIZE - reply.size()) throw new IOException("手表回复异常");
+        while ((length = stream.read(buffer, 0, buffer.length)) != -1) {
+            if (length > MAX_REPLY_SIZE - reply.size()) throw new InstallFailure("手表回复异常");
             reply.write(buffer, 0, length);
         }
         return new String(reply.toByteArray(), StandardCharsets.UTF_8);
@@ -107,14 +107,29 @@ final class WatchAdb extends AbsAdbConnectionManager {
     static String localIp(String text) throws IOException {
         String ip = text.trim();
         if (ip.startsWith("[") && ip.endsWith("]")) ip = ip.substring(1, ip.length() - 1);
-        if (!(ip.matches("[0-9]+(\\.[0-9]+){3}") || (ip.contains(":") && ip.matches("[0-9a-fA-F:.]+")))) {
-            throw new IOException("请输入手表无线调试页面显示的 IP 地址");
+        InetAddress address;
+        try {
+            if (ip.matches("[0-9]{1,3}(\\.[0-9]{1,3}){3}")) {
+                byte[] ipv4 = new byte[4];
+                String[] octets = ip.split("\\.");
+                for (int index = 0; index < octets.length; index++) {
+                    int value = Integer.parseInt(octets[index]);
+                    if (value > 255) throw new UnknownHostException();
+                    ipv4[index] = (byte) value;
+                }
+                address = InetAddress.getByAddress(ipv4);
+            } else if (ip.contains(":") && ip.matches("[0-9a-fA-F:.]+")) {
+                address = InetAddress.getByName(ip);
+            } else {
+                throw new UnknownHostException();
+            }
+        } catch (UnknownHostException invalid) {
+            throw new InstallFailure("请输入手表无线调试页面显示的有效 IP 地址", invalid);
         }
-        InetAddress address = InetAddress.getByName(ip);
         byte[] bytes = address.getAddress();
         boolean uniqueLocalV6 = bytes.length == 16 && (bytes[0] & 0xfe) == 0xfc;
         if (!address.isSiteLocalAddress() && !address.isLinkLocalAddress() && !uniqueLocalV6) {
-            throw new IOException("请使用同一可信 Wi-Fi 下手表的局域网 IP");
+            throw new InstallFailure("请使用同一可信 Wi-Fi 下手表的局域网 IP");
         }
         return address.getHostAddress();
     }

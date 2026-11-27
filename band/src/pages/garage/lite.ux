@@ -73,35 +73,37 @@
       </div>
     </scroll>
     <stack class="{{ hasThemeSurface ? 'watch-shell' + themeStage : 'watch-shell watch-shell-classic' }}" if="{{ homeLayoutReady && useTwoPageShell }}">
-      <swiper id="watchSwiper" class="watch-swiper" vertical="true" indicator="false" loop="false" focusable="true" enableswipe="{{ !confirmTitle }}" index="{{ watchPage }}" @change="onWatchPageChange">
+      <swiper id="watchSwiper" class="watch-swiper" vertical="true" indicator="false" loop="false" index="{{ watchPage }}" @change="onWatchPageChange">
         <div class="{{ watchHomeUi.mileagePage + (hasThemeSurface ? themeStage : ' watch-mileage-page-classic') }}">
-          <div class="{{ 'watch-connection-row' + (layoutProfile === 'rect' ? ' watch-connection-row-rect' : '') }}">
-            <text class="{{ 'watch-model-top-left' + themeInk }}" if="{{ layoutProfile === 'rect' }}">{{ vehicleName }}</text>
-            <div class="watch-connection" @click="refresh">
-              <div class="{{ (modeLabel === '已连接' || modeLabel === '演示') ? (themeDay ? 'dot online-day' : 'dot online') : 'dot' }}"></div>
-              <text class="{{ 'watch-connection-text' + themeInk }}">{{ modeLabel }}</text>
+          <div class="watch-home-top">
+            <div class="{{ 'watch-connection-row' + (layoutProfile === 'rect' ? ' watch-connection-row-rect' : '') }}">
+              <text class="{{ 'watch-model-top-left' + themeInk }}" if="{{ layoutProfile === 'rect' }}">{{ vehicleName }}</text>
+              <div class="watch-connection" @click="refresh">
+                <div class="{{ (modeLabel === '已连接' || modeLabel === '演示') ? (themeDay ? 'dot online-day' : 'dot online') : 'dot' }}"></div>
+                <text class="{{ 'watch-connection-text' + themeInk }}">{{ modeLabel }}</text>
+              </div>
             </div>
-          </div>
-          <div class="{{ watchHomeUi.heroHeader }}">
-            <text class="{{ watchHomeUi.model + themeInk }}" if="{{ layoutProfile !== 'rect' }}">{{ vehicleName }}</text>
-            <div class="watch-hero-num-row">
-              <text class="{{ watchHomeUi.heroUnitGhost }}">{{ totalUnit || ' km' }}</text>
-              <text class="{{ watchHomeUi.hero + themeInk }}">{{ total }}</text>
-              <text class="{{ watchHomeUi.heroUnit + themeMuted }}">{{ totalUnit }}</text>
-            </div>
-            <div class="watch-energy-summary">
-              <div class="watch-energy-item" for="{{ rangeBreakdown }}" tid="id">
-                <div class="watch-energy-reading">
-                  <image class="watch-energy-icon" src="{{ themeIconPath + 'energy-' + $item.id + '.png' }}"></image>
-                  <text class="{{ 'watch-energy-value' + themeInk }}">{{ $item.value }}</text>
-                </div>
-                <div class="{{ 'watch-energy-track' + (themeDay ? ' watch-energy-track-day' : '') }}">
-                  <div class="{{ 'watch-energy-fill ' + $item.id + '-fill' }}" if="{{ $item.percent > 0 }}" style="width: {{ $item.percent }}%"></div>
+            <div class="{{ watchHomeUi.heroHeader }}">
+              <text class="{{ watchHomeUi.model + themeInk }}" if="{{ layoutProfile !== 'rect' }}">{{ vehicleName }}</text>
+              <div class="watch-hero-num-row">
+                <text class="{{ watchHomeUi.heroUnitGhost }}">{{ totalUnit || ' km' }}</text>
+                <text class="{{ watchHomeUi.hero + themeInk }}">{{ total }}</text>
+                <text class="{{ watchHomeUi.heroUnit + themeMuted }}">{{ totalUnit }}</text>
+              </div>
+              <div class="watch-energy-summary">
+                <div class="watch-energy-item" for="{{ rangeBreakdown }}" tid="id">
+                  <div class="watch-energy-reading">
+                    <image class="watch-energy-icon" src="{{ themeIconPath + 'energy-' + $item.id + '.png' }}"></image>
+                    <text class="{{ 'watch-energy-value' + themeInk }}">{{ $item.value }}</text>
+                  </div>
+                  <div class="{{ 'watch-energy-track' + (themeDay ? ' watch-energy-track-day' : '') }}">
+                    <div class="{{ 'watch-energy-fill ' + $item.id + '-fill' }}" if="{{ $item.percent > 0 }}" style="width: {{ $item.percent }}%"></div>
+                  </div>
                 </div>
               </div>
             </div>
+            <image class="{{ watchHomeUi.car }}" if="{{ carImageSrc }}" src="{{ carImageSrc }}" @error="onCarImageError"></image>
           </div>
-          <image class="{{ watchHomeUi.car }}" if="{{ carImageSrc }}" src="{{ carImageSrc }}" @error="onCarImageError"></image>
           <div class="watch-home-footer">
             <div class="watch-motion-group">
               <image class="watch-motion-icon" if="{{ motion === '已驻车' }}" src="{{ themeIconPath + 'parking-status.png' }}"></image>
@@ -115,14 +117,16 @@
         <div class="{{ watchControlsUi.controlsPage + (hasThemeSurface ? themeStage : ' watch-controls-page-classic') }}"
              @touchstart="startControlsPull" @touchmove="moveControlsPull" @touchend="endControlsPull">
           <div class="{{ watchControlsUi.topPill }}" @click="refresh">
-            <image class="{{ watchControlsUi.refreshIcon }}" src="{{ themeIconPath + 'refresh.png' }}"></image>
-            <text class="{{ watchControlsUi.topText + themeInk }}">{{ controlsPullText || refreshText }}</text>
+            <div class="watch-top-pill-row">
+              <image class="{{ watchControlsUi.refreshIcon }}" src="{{ themeIconPath + 'refresh.png' }}"></image>
+              <text class="{{ watchControlsUi.topText + themeInk }}">{{ controlsPullText || refreshText }}</text>
+            </div>
             <div class="{{ 'watch-pull-progress' + (themeDay ? ' watch-pull-progress-day' : '') }}" if="{{ controlsPullProgress > 0 || refreshing }}">
               <div class="{{ 'watch-pull-fill' + (themeDay ? ' watch-pull-fill-day' : '') }}" style="width: {{ refreshing ? 100 : controlsPullProgress }}%"></div>
             </div>
           </div>
           <text class="{{ watchControlsUi.empty + themeMuted + themeControl }}" if="{{ compatibilityNotice }}">{{ compatibilityNotice }}</text>
-          <div class="{{ watchControlsUi.grid }}" if="{{ !compatibilityNotice }}" style="transform: {{ controlsPullTransform }}">
+          <div class="{{ watchControlsUi.grid }}" if="{{ !compatibilityNotice }}">
             <div class="{{ watchControlsUi.controlRow }}" for="{{ displayRows }}" tid="id">
               <div class="{{ $item.first.watchCellStyle + themeTileClass + $item.first.watchCellStateStyle }}" @click="select($item.first.id)">
                 <div class="{{ $item.first.watchOrbStyle + ' ' + $item.first.watchOrbSizeStyle + $item.first.watchOrbDayStyle }}">
@@ -210,7 +214,7 @@ export default createGaragePage({ lite: true })
   justify-content: space-between;
 }
 .refresh {
-  width: 174px;
+  width: 170px;
   height: 48px;
   flex-direction: row;
   align-items: center;
@@ -232,12 +236,12 @@ export default createGaragePage({ lite: true })
   height: 48px;
   flex-direction: row;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
 }
 .connection-status {
-  width: 108px;
-  margin-left: 0;
-  justify-content: center;
+  width: 96px;
+  height: 48px;
+  margin-left: 18px;
   flex-direction: row;
   align-items: center;
 }
@@ -252,7 +256,7 @@ export default createGaragePage({ lite: true })
   background-color: #9ee9ce;
 }
 .mode {
-  width: 71px;
+  width: 80px;
   color: #c5d5d4;
   font-size: 15px;
   lines: 1;
@@ -380,7 +384,7 @@ export default createGaragePage({ lite: true })
   background-color: #9ee9ce;
 }
 .updated {
-  width: 134px;
+  width: 130px;
   color: #d4e4e2;
   font-size: 15px;
   lines: 1;
@@ -674,11 +678,13 @@ export default createGaragePage({ lite: true })
 .connection-capsule {
   width: 270px;
   height: 44px;
+  justify-content: flex-start;
 }
 .connection-status-capsule {
   width: 270px;
+  height: 44px;
   justify-content: flex-start;
-  margin-left: 0;
+  margin-left: 0px;
 }
 .dot-capsule {
   width: 11px;
@@ -796,8 +802,13 @@ export default createGaragePage({ lite: true })
   align-items: center;
 }
 .watch-mileage-page {
-  padding: 16px 14px 8px;
-  justify-content: flex-start;
+  padding: 16px 14px 10px;
+  justify-content: space-between;
+}
+.watch-home-top {
+  width: 100%;
+  flex-direction: column;
+  align-items: center;
 }
 .watch-mileage-page-classic {
   background-color: #000000;
@@ -870,6 +881,7 @@ export default createGaragePage({ lite: true })
   width: 100%;
   height: 37px;
   margin-top: 4px;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
 }
@@ -880,6 +892,7 @@ export default createGaragePage({ lite: true })
 }
 .watch-energy-reading {
   height: 25px;
+  flex-direction: row;
   align-items: center;
 }
 .watch-energy-icon {
@@ -910,6 +923,7 @@ export default createGaragePage({ lite: true })
 .watch-connection-row {
   width: 100%;
   height: 24px;
+  flex-direction: row;
   align-items: center;
   justify-content: flex-end;
   padding-right: 6px;
@@ -927,7 +941,7 @@ export default createGaragePage({ lite: true })
   align-items: center;
 }
 .watch-model-top-left {
-  flex: 1;
+  width: 196px;
   height: 40px;
   margin-right: 10px;
   color: #eef4ff;
@@ -939,6 +953,7 @@ export default createGaragePage({ lite: true })
 }
 .watch-connection {
   height: 24px;
+  flex-direction: row;
   align-items: center;
 }
 .watch-connection-text {
@@ -948,7 +963,6 @@ export default createGaragePage({ lite: true })
   color: #f4f8ff;
   font-size: 16px;
   lines: 1;
-  letter-spacing: 0.5px;
   text-overflow: ellipsis;
 }
 .watch-refresh-icon {
@@ -979,8 +993,15 @@ export default createGaragePage({ lite: true })
   background-color: #0a101b;
 }
 .watch-top-pill {
-  height: 26px;
+  height: 32px;
   padding: 0 12px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.watch-top-pill-row {
+  height: 26px;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
 }
@@ -991,11 +1012,9 @@ export default createGaragePage({ lite: true })
   lines: 1;
 }
 .watch-pull-progress {
-  position: absolute;
   width: 72px;
   height: 3px;
-  left: 24px;
-  bottom: 0;
+  margin-top: 2px;
   border-radius: 2px;
   background-color: rgba(219, 232, 247, 0.35);
 }
@@ -1013,6 +1032,7 @@ export default createGaragePage({ lite: true })
 .watch-control-row {
   width: 248px;
   margin-top: 8px;
+  flex-direction: row;
   justify-content: space-around;
 }
 .watch-cell {
@@ -1101,10 +1121,7 @@ export default createGaragePage({ lite: true })
   background-color: #9ee9ce;
 }
 .watch-home-footer {
-  position: absolute;
-  left: 0px;
-  bottom: 9px;
-  width: 336px;
+  width: 100%;
   flex-direction: column;
   align-items: center;
 }
@@ -1112,6 +1129,7 @@ export default createGaragePage({ lite: true })
   width: 176px;
   height: 24px;
   margin-bottom: 6px;
+  flex-direction: row;
   align-items: center;
   justify-content: center;
 }
@@ -1163,18 +1181,18 @@ export default createGaragePage({ lite: true })
 .watch-car-tall {
   width: 300px;
   height: 186px;
-  margin-top: 20px;
+  margin-top: 14px;
 }
 .watch-car-short {
   height: 138px;
-  margin-top: 12px;
+  margin-top: 10px;
 }
 .watch-controls-page-tall {
   padding: 14px 18px 14px;
   justify-content: flex-start;
 }
 .watch-top-pill-tall {
-  height: 32px;
+  height: 36px;
   padding: 0 14px;
 }
 .watch-top-text-tall {

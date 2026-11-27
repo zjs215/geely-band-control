@@ -685,7 +685,7 @@ export function createGaragePage(options = {}) {
     const targetId = this.confirmTitle ? ''
       : !LITE && this.settingsOpen ? (this.themeEditorOpen ? 'themeEditorScroll' : 'settingsScroll')
         : !this.homeLayoutReady ? ''
-          : this.isTwoPageShell() ? 'watchSwiper' : (!LITE && this.isCircularProfile() ? 'circleSingleShell' : (LITE ? '' : 'homeScroll'))
+          : this.isTwoPageShell() ? (LITE ? '' : 'watchSwiper') : (!LITE && this.isCircularProfile() ? 'circleSingleShell' : (LITE ? '' : 'homeScroll'))
     clearTimeout(this.focusTimer)
     this.focusTimer = null
     if (!targetId) return

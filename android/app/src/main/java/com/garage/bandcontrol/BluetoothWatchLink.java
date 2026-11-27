@@ -16,9 +16,11 @@ import android.util.Log;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Consumer;
@@ -34,7 +36,7 @@ final class BluetoothWatchLink {
     private final XiaomiLink.Receiver receiver;
     private final Consumer<String> onDisconnect;
     private final Runnable onChange;
-    private final Map<String, ClientSession> sessions = new ConcurrentHashMap<>();
+    private final Map<String, ClientSession> sessions = new HashMap<>();
 
     private volatile boolean active;
     private volatile int generation;
@@ -61,6 +63,13 @@ final class BluetoothWatchLink {
 
     boolean isConnected() {
         return !sessions.isEmpty();
+    }
+
+    List<String> connectedDevices() {
+        List<String> devices = new ArrayList<>(sessions.size());
+        for (ClientSession session : sessions.values()) devices.add(session.deviceLabel);
+        devices.sort(String::compareTo);
+        return devices;
     }
 
     void start() {
@@ -153,29 +162,38 @@ final class BluetoothWatchLink {
             closeQuietly(socket);
             return;
         }
-        String node = NODE_PREFIX + remote.getAddress();
-        ClientSession session = new ClientSession(node, socket, requestGeneration);
-        ClientSession previous = sessions.put(node, session);
-        if (previous != null) previous.close();
+        String address = remote.getAddress();
+        String node = NODE_PREFIX + address;
+        String name = "";
+        try {
+            name = remote.getName();
+        } catch (SecurityException ignored) {
+            // The Bluetooth name is optional metadata for an accepted connection.
+        }
+        String label = (name == null || name.trim().isEmpty()
+                ? "手表 (" + address.substring(Math.max(0, address.length() - 5)) + ")" : name.trim()) + " · 蓝牙直连";
         main.post(() -> {
-            if (active && generation == requestGeneration) {
-                setStatus("手表已连接（蓝牙直连）");
+            if (!active || generation != requestGeneration) {
+                closeQuietly(socket);
+                return;
             }
+            ClientSession session = new ClientSession(node, label, socket, requestGeneration);
+            ClientSession previous = sessions.put(node, session);
+            if (previous != null) previous.close();
+            setStatus("手表已连接（蓝牙直连）");
+            session.start();
         });
-        session.start();
     }
 
     private void removeSession(String node, ClientSession session, int requestGeneration) {
-        if (!sessions.remove(node, session)) return;
         main.post(() -> {
-            if (generation != requestGeneration) return;
+            if (generation != requestGeneration || !sessions.remove(node, session)) return;
             onDisconnect.accept(node);
             setStatus(sessions.isEmpty() ? "" : "手表已连接（蓝牙直连）");
         });
     }
 
     private void setStatus(String value) {
-        if (status.equals(value)) return;
         status = value;
         onChange.run();
     }
@@ -198,13 +216,15 @@ final class BluetoothWatchLink {
 
     private final class ClientSession {
         private final String node;
+        private final String deviceLabel;
         private final BluetoothSocket socket;
         private final int requestGeneration;
         private final ExecutorService writer = Executors.newSingleThreadExecutor();
         private volatile boolean closed;
 
-        ClientSession(String node, BluetoothSocket socket, int requestGeneration) {
+        ClientSession(String node, String deviceLabel, BluetoothSocket socket, int requestGeneration) {
             this.node = node;
+            this.deviceLabel = deviceLabel;
             this.socket = socket;
             this.requestGeneration = requestGeneration;
         }
