@@ -149,6 +149,33 @@ const CLIMATE_CONFIRMATION = {
   status: 'confirm', action: 'climate', token: 'a'.repeat(36), message: '开启空调'
 }
 
+test('a valid wearable ticket skips the prompt only when the phone explicitly disables confirmation', () => {
+  for (const confirmationRequired of [true, undefined, 'false', false]) {
+    const link = start()
+    link.hello()
+    link.reply()
+    link.page.select('climate')
+    link.reply({ ...CLIMATE_CONFIRMATION, confirmationRequired })
+    if (confirmationRequired === false) {
+      assert.equal(link.page.confirmTitle, '')
+      assert.equal(link.sent.at(-1).data.type, 'execute')
+      assert.equal(link.sent.at(-1).data.token, CLIMATE_CONFIRMATION.token)
+      assert.equal(link.sent.at(-1).data.action, 'climate')
+      assert.equal(link.types().filter(type => type === 'execute').length, 1)
+    } else {
+      assert.equal(link.page.confirmTitle, CLIMATE_CONFIRMATION.message)
+      assert.equal(link.sent.at(-1).data.type, 'prepare')
+    }
+  }
+  const changed = start()
+  changed.hello()
+  changed.reply()
+  changed.page.select('climate')
+  changed.reply({ ...CLIMATE_CONFIRMATION, confirmationRequired: false, controlDirections: { climate: 'close' } })
+  assert.equal(changed.page.confirmTitle, '')
+  assert.equal(changed.sent.at(-1).data.type, 'prepare')
+})
+
 function confirmClimate(link) {
   link.page.select('climate')
   assert.equal(link.sent.at(-1).data.type, 'prepare')

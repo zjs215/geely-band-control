@@ -1936,6 +1936,10 @@ export function createGaragePage(options = {}) {
       this.clearToast()
       this.confirmAction = request.action
       this.confirmToken = reply.token
+      if (reply.confirmationRequired === false) {
+        this.execute()
+        return
+      }
       this.confirmIcon = this.controlIconUris[request.action] || actionIcon(request.action, directions[request.action], this.lynkControlLabels[request.action])
       this.confirmTitle = reply.message
       this.confirmTimer = setTimeout(() => {

@@ -850,6 +850,10 @@ public final class WatchActivity extends Activity implements BluetoothPhoneClien
             clearToast();
             confirmAction = request.action();
             confirmToken = token;
+            if (Boolean.FALSE.equals(reply.opt("confirmationRequired"))) {
+                executeConfirmation();
+                return;
+            }
             confirmIconAsset = WatchProtocol.iconAsset(request.action(), directions.get(request.action()),
                     WatchProtocol.lynkControlLabel(lynkControlLabels, request.action()));
             confirmTitle = message;

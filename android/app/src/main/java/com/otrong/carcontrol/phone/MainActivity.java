@@ -68,6 +68,7 @@ import java.util.Map;
 
 public final class MainActivity extends Activity {
     static final String SHOW_CONFIRMATION = "com.garage.bandcontrol.SHOW_CONFIRMATION";
+    static final String SHOW_VOICE_CONFIRMATION = "com.garage.bandcontrol.SHOW_VOICE_CONFIRMATION";
     private static final int BG = Color.rgb(16, 22, 27);
     private static final int PANEL = Color.rgb(25, 35, 43);
     private static final int CONTROL = Color.rgb(35, 49, 59);
@@ -76,6 +77,7 @@ public final class MainActivity extends Activity {
     private static final int MUTED = Color.rgb(164, 183, 189);
     private static final int MINT = Color.rgb(154, 232, 206);
     private static final int BLUETOOTH_REQUEST = 73;
+    private static final int VOICE_NOTIFICATIONS_REQUEST = 74;
     private static final String BIND_ID = "pendingWidgetId";
     private static final int NO_WIDGET = AppWidgetManager.INVALID_APPWIDGET_ID;
     private static final int LOG_VIEW_HEIGHT_DP = 220;
@@ -107,6 +109,9 @@ public final class MainActivity extends Activity {
     private Button phoneConfirmation;
     private Switch voiceToggle;
     private AlertDialog officialDialog;
+    private AlertDialog voiceConfirmationDialog;
+    private Button confirmationSettings;
+    private Button voiceConfirmation;
     private ThemeClock themeClock;
     private final ThemeStyles themeStyles = new ThemeStyles();
     private final ThemeDialogs dialogs = new ThemeDialogs(this, themeStyles);
@@ -322,6 +327,11 @@ public final class MainActivity extends Activity {
         add(controlPanel, controlStatus, 4);
         liveControl = button("允许车控", this::toggleControl);
         add(controlPanel, liveControl, 12);
+        confirmationSettings = button("二次确认设置", this::showControlConfirmationSettings);
+        add(controlPanel, confirmationSettings, 8);
+        voiceConfirmation = button("确认米家语音操作", () -> showVoiceConfirmation(null));
+        voiceConfirmation.setActivated(true);
+        add(controlPanel, voiceConfirmation, 8);
         phoneConfirmation = button("处理银河官方确认".replace("银河", app.brand.name), this::showOfficialConfirmation);
         phoneConfirmation.setActivated(true);
         add(controlPanel, phoneConfirmation, 8);
@@ -777,13 +787,85 @@ public final class MainActivity extends Activity {
         liveControl.setText(armed ? "关闭车控" : "允许车控");
         liveControl.setActivated(!armed);
         liveControl.setEnabled(armed || hasReady);
+        confirmationSettings.setVisibility(controls.values().stream().anyMatch(control -> control.target() != null)
+                ? View.VISIBLE : View.GONE);
+        voiceConfirmation.setVisibility(app.pendingVoiceConfirmation() != null ? View.VISIBLE : View.GONE);
         phoneConfirmation.setVisibility(app.phoneConfirmationCard() != null ? View.VISIBLE : View.GONE);
     }
 
+    private void showControlConfirmationSettings() {
+        List<Map.Entry<CarAction, GalaxyWidgets.Control>> controls = new ArrayList<>(app.widgets.controls().entrySet());
+        controls.removeIf(entry -> entry.getValue().target() == null);
+        String[] labels = controls.stream().map(entry -> {
+            GalaxyWidgets.Target target = entry.getValue().target();
+            String action = app.brand == BrandConfig.LYNKCO ? target.lynkShortLabel() : entry.getKey().label;
+            GarageApp.ConfirmationSettings settings = app.confirmationSettings(entry.getKey(), target);
+            String voice = app.hasVoiceCommand(entry.getKey(), target)
+                    ? " · 米家语音" + (settings.voice() ? "确认" : "直控") : "";
+            return action + "\n穿戴端" + (settings.wearable() ? "确认" : "直控") + voice;
+        }).toArray(String[]::new);
+        dialogs.builder().setTitle("二次确认设置").setItems(labels, (dialog, index) -> {
+            var entry = controls.get(index);
+            editControlConfirmation(entry.getKey(), entry.getValue().target());
+        }).setNegativeButton("关闭", null).show();
+    }
+
+    private void editControlConfirmation(CarAction action, GalaxyWidgets.Target target) {
+        boolean voiceAvailable = app.hasVoiceCommand(action, target);
+        GarageApp.ConfirmationSettings initial = app.confirmationSettings(action, target);
+        LinearLayout fields = column();
+        fields.setPadding(dp(24), dp(4), dp(24), dp(8));
+        Switch wearable = styledSwitch("手环和手表二次确认");
+        wearable.setText("手环和手表二次确认");
+        wearable.setChecked(initial.wearable());
+        themeStyles.bind(wearable, (view, palette) -> wearable.setTextColor(foreground(INK, palette)));
+        wearable.setMinHeight(dp(48));
+        add(fields, wearable, 0);
+        Switch voice = styledSwitch("米家语音二次确认");
+        if (voiceAvailable) {
+            voice.setText("米家语音二次确认");
+            voice.setChecked(initial.voice());
+            themeStyles.bind(voice, (view, palette) -> voice.setTextColor(foreground(INK, palette)));
+            voice.setMinHeight(dp(48));
+            add(fields, voice, 6);
+            add(fields, text("开启后，在手机通知或「车控授权」中确认，30 秒内有效。", 13, MUTED, false), 4);
+        }
+        String title = app.brand == BrandConfig.LYNKCO ? target.lynkShortLabel() : action.label;
+        dialogs.builder().setTitle(title + "二次确认").setView(fields)
+                .setNegativeButton("取消", null).setPositiveButton("保存", (dialog, which) -> {
+                    boolean confirmVoice = voiceAvailable ? voice.isChecked() : initial.voice();
+                    app.setConfirmationSettings(action, target,
+                            new GarageApp.ConfirmationSettings(wearable.isChecked(), confirmVoice));
+                    if (voiceAvailable && confirmVoice && !initial.voice() && Build.VERSION.SDK_INT >= 33
+                            && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, VOICE_NOTIFICATIONS_REQUEST);
+                    }
+                }).show();
+    }
+
     private void handleConfirmationIntent(Intent intent) {
-        if (intent == null || !SHOW_CONFIRMATION.equals(intent.getAction())) return;
-        intent.setAction(null);
-        showOfficialConfirmation();
+        if (intent == null) return;
+        if (SHOW_CONFIRMATION.equals(intent.getAction())) {
+            intent.setAction(null);
+            showOfficialConfirmation();
+        } else if (SHOW_VOICE_CONFIRMATION.equals(intent.getAction())) {
+            intent.setAction(null);
+            if (intent.getData() != null) showVoiceConfirmation(intent.getData().getSchemeSpecificPart());
+        }
+    }
+
+    private void showVoiceConfirmation(String id) {
+        GarageApp.VoiceConfirmation pending = app.pendingVoiceConfirmation();
+        if (pending == null || (id != null && !id.equals(pending.id()))) {
+            Toast.makeText(this, "米家语音确认已失效", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (voiceConfirmationDialog != null) voiceConfirmationDialog.dismiss();
+        voiceConfirmationDialog = dialogs.builder().setTitle("确认米家语音操作")
+                .setMessage(app.brand.name + " · " + pending.title())
+                .setNegativeButton("取消指令", (dialog, which) -> app.respondToVoiceConfirmation(pending, false))
+                .setPositiveButton("确认执行", (dialog, which) -> app.respondToVoiceConfirmation(pending, true))
+                .show();
     }
 
     private void showOfficialConfirmation() {
@@ -889,10 +971,10 @@ public final class MainActivity extends Activity {
         }
         dialogs.builder()
                 .setTitle("允许车控")
-                .setMessage("请确认当前卡片选中目标车辆，且映射按钮与" + app.brand.name + "小组件配置一致。米家语音指令或穿戴端确认将触发对应的官方按钮。"
+                .setMessage("请确认当前卡片选中目标车辆，且映射按钮与" + app.brand.name + "小组件配置一致。穿戴和米家语音会按各动作的二次确认设置触发对应的官方按钮。"
                         + (app.brand == BrandConfig.LYNKCO ? "领克语音无需穿戴设备。切换车锁、车窗或后备箱会点击对应的官方按钮，由车主判断当前状态。与本次动作匹配的官方弹窗可由伴侣提交。" : "")
                         + "\n\n安全与免责提示：本工具为独立开源项目，与吉利汽车及小米无官方关联。远程控车存在通信与刷新延迟，车辆实际状态以" + app.brand.appName + " App 为准；"
-                        + "米家语音收到通知后将直接执行，请谨慎设置触发口令；如搭配穿戴设备使用，请开启锁屏密码，离车或非本人佩戴时及时关闭车控授权。")
+                        + "请谨慎设置米家触发口令；如搭配穿戴设备使用，请开启锁屏密码，离车或非本人佩戴时及时关闭车控授权。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("已知晓并允许", (dialog, which) -> app.arm())
                 .show();

@@ -1,8 +1,8 @@
 {
   "package": "com.garage.bandcontrol",
   "name": "腕上车控",
-  "versionName": "0.3.5",
-  "versionCode": 55,
+  "versionName": "0.3.6",
+  "versionCode": 56,
   "minPlatformVersion": 1000,
   "minAPILevel": 1,
   "icon": "/common/icon.png",
