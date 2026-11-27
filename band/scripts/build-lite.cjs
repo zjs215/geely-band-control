@@ -39,7 +39,10 @@ for (const entry of fs.readdirSync(path.join(srcDir, 'common'), { withFileTypes:
   if (entry.name === 'themes') continue
   fs.cpSync(from, to, {
     recursive: true,
-    filter: item => path.basename(item) !== 'settings.png'
+    filter: item => {
+      const base = path.basename(item)
+      return base !== 'settings.png' && base !== 'back.png'
+    }
   })
 }
 
