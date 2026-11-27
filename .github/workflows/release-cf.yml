@@ -1,0 +1,45 @@
+name: Release to Cloudflare Pages
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: band/package-lock.json
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android platform
+        shell: pwsh
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build release packages and installer
+        shell: pwsh
+        run: |
+          ./scripts/build.ps1
+          ./scripts/build-installer.ps1
+          ./scripts/publish-cf-pages.ps1
+      - name: Deploy to Cloudflare Pages
+        shell: pwsh
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx --yes wrangler@4 pages deploy artifacts/cf-pages --project-name=geely-band-control --branch=main --force

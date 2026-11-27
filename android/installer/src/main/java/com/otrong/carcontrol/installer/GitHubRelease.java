@@ -16,9 +16,13 @@ import javax.net.ssl.HttpsURLConnection;
 
 final class GitHubRelease {
     private static final String REPO = "/zjs215/geely-band-control";
+    private static final String MIRROR_BASE = "https://car.otrong.com";
+    private static final String MIRROR_LATEST = MIRROR_BASE + "/latest.json";
     private static final String LATEST = "https://api.github.com/repos" + REPO + "/releases/latest";
     private static final String DOWNLOAD = "https://github.com" + REPO + "/releases/download/";
     private static final int MAX_ASSET_BYTES = 24 * 1024 * 1024;
+    private static final int METADATA_TIMEOUT_SECONDS = 15;
+    private static final int DOWNLOAD_TIMEOUT_SECONDS = 90;
 
     private static final int MAX_NOTES_CHARS = 4000;
     static final String INSTALLER_ASSET = "wrist-car-control-installer.apk";
@@ -30,7 +34,11 @@ final class GitHubRelease {
     }
 
     static Release latestRelease() throws IOException {
-        return parse(new String(get(LATEST, 512 * 1024), StandardCharsets.UTF_8));
+        try {
+            return parse(new String(get(MIRROR_LATEST, 512 * 1024, METADATA_TIMEOUT_SECONDS), StandardCharsets.UTF_8));
+        } catch (IOException mirrorUnavailable) {
+            return parse(new String(get(LATEST, 512 * 1024, METADATA_TIMEOUT_SECONDS), StandardCharsets.UTF_8));
+        }
     }
 
     static Asset select(String json, InstallTarget target) throws IOException {
@@ -107,15 +115,17 @@ final class GitHubRelease {
                 for (int i = 0; i < assets.length(); i++) {
                     JSONObject item = assets.optJSONObject(i);
                     if (item == null || !name.equals(item.optString("name"))) continue;
-                    String url = DOWNLOAD + tag + "/" + name;
+                    String githubUrl = DOWNLOAD + tag + "/" + name;
+                    String mirrorUrl = MIRROR_BASE + "/" + tag + "/" + name;
+                    String actualUrl = item.optString("browser_download_url");
                     long size = item.optLong("size");
                     String digest = item.optString("digest").toLowerCase(Locale.ROOT);
                     if (size <= 0 || size > MAX_ASSET_BYTES || !"uploaded".equals(item.optString("state"))
-                            || !url.equals(item.optString("browser_download_url"))
+                            || !(githubUrl.equals(actualUrl) || mirrorUrl.equals(actualUrl))
                             || !digest.matches("sha256:[0-9a-f]{64}")) {
                         throw new IOException("GitHub 发布包缺少有效的校验信息");
                     }
-                    return new Asset(tag, name, url, (int) size, digest.substring(7));
+                    return new Asset(tag, name, actualUrl, (int) size, digest.substring(7));
                 }
             }
             throw new IOException("GitHub 稳定版未提供此设备的安装包");
@@ -123,7 +133,7 @@ final class GitHubRelease {
     }
 
     static byte[] download(Asset asset) throws IOException {
-        byte[] data = get(asset.url, asset.size);
+        byte[] data = get(asset.url, asset.size, DOWNLOAD_TIMEOUT_SECONDS);
         if (data.length != asset.size || !BundledPackages.sha256(data).equals(asset.digest)) {
             throw new IOException("GitHub 安装包 SHA-256 或大小校验失败");
         }
@@ -145,22 +155,23 @@ final class GitHubRelease {
         return 0;
     }
 
-    private static byte[] get(String source, int maxSize) throws IOException {
+    private static byte[] get(String source, int maxSize, int timeoutSeconds) throws IOException {
         URL url = new URL(source);
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(22);
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
         for (int redirect = 0; redirect < 4; redirect++) {
             String host = url.getHost();
             if (!"https".equals(url.getProtocol()) || url.getUserInfo() != null
                     || (url.getPort() != -1 && url.getPort() != 443)
-                    || !(host.equals("api.github.com") || host.equals("github.com")
+                    || !(host.equals("car.otrong.com")
+                        || host.equals("api.github.com") || host.equals("github.com")
                         || host.equals("release-assets.githubusercontent.com")
                         || host.equals("objects.githubusercontent.com"))) {
                 throw new IOException("GitHub 下载地址无效");
             }
             HttpsURLConnection connection = (HttpsURLConnection) url.openConnection();
             connection.setInstanceFollowRedirects(false);
-            connection.setConnectTimeout(6500);
-            connection.setReadTimeout(9000);
+            connection.setConnectTimeout(10_000);
+            connection.setReadTimeout(20_000);
             connection.setRequestProperty("User-Agent", "Wrist-Car-Control-Installer");
             if (host.equals("api.github.com")) {
                 connection.setRequestProperty("Accept", "application/vnd.github+json");

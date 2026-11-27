@@ -42,22 +42,35 @@ final class InstallPackages {
     Selected resolve(InstallTarget target, BandProtocol.Progress progress) throws IOException, InterruptedException {
         BundledPackages.Package fallback = target.bundled(bundled);
         String reason;
-        progress.report("正在检查 GitHub 稳定版", -1);
+        progress.report("正在检查在线稳定版", -1);
+        GitHubRelease.Asset asset;
         try {
-            GitHubRelease.Asset asset = GitHubRelease.latest(target);
-            if (GitHubRelease.compareVersions(asset.tag().substring(1), fallback.version()) >= 0) {
-                progress.report("正在下载并校验 GitHub " + asset.tag(), -1);
-                byte[] bytes = GitHubRelease.download(asset);
-                Version version = target.isRpk() ? validateRpk(bytes, target == InstallTarget.BAND)
-                        : validateApk(target, bytes, bundled.verifiedBytes(fallback));
-                if (!asset.tag().equals("v" + version.name)) throw new IOException("发布标签与包内版本不一致");
-                if (version.code >= fallback.versionCode()) {
-                    return new Selected(bytes, version.name, version.code, "GitHub");
+            asset = GitHubRelease.latest(target);
+        } catch (IOException unavailable) {
+            asset = null;
+        }
+        if (asset != null) {
+            int comparison = GitHubRelease.compareVersions(asset.tag().substring(1), fallback.version());
+            if (comparison >= 0) {
+                try {
+                    progress.report("正在下载并校验 " + asset.tag(), -1);
+                    byte[] bytes = GitHubRelease.download(asset);
+                    Version version = target.isRpk() ? validateRpk(bytes, target == InstallTarget.BAND)
+                            : validateApk(target, bytes, bundled.verifiedBytes(fallback));
+                    if (!asset.tag().equals("v" + version.name)) throw new IOException("发布标签与包内版本不一致");
+                    if (version.code >= fallback.versionCode()) {
+                        return new Selected(bytes, version.name, version.code, "线上");
+                    }
+                } catch (IOException downloadFailed) {
+                    if (comparison > 0) {
+                        throw new InstallFailure("检测到新版 " + asset.tag() + "，但下载或校验失败："
+                                + downloadFailed.getMessage(), downloadFailed);
+                    }
                 }
             }
-            reason = "GitHub 版本较早";
-        } catch (IOException unavailable) {
-            reason = "GitHub 包暂不可用";
+            reason = "线上版本较早";
+        } else {
+            reason = "在线包暂不可用";
         }
         if (Thread.currentThread().isInterrupted()) throw new InterruptedException();
         progress.report(reason + "，使用内置 v" + fallback.version(), -1);
