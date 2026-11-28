@@ -1,0 +1,4 @@
+<resources>
+    <style name="PlatformApp" parent="@android:style/Theme.Material.Light.NoActionBar"/>
+    <style name="PlatformDialog" parent="@android:style/Theme.Material.Light.Dialog.Alert"/>
+</resources>

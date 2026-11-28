@@ -1,0 +1,4 @@
+<resources>
+    <item name="phone_scroll" type="id"/>
+    <item name="phone_landscape_image" type="id"/>
+</resources>

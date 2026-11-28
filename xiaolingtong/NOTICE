@@ -1,0 +1,16 @@
+小领通
+
+This independent application adapts XiaomiLink, BandService, the Android/Vela build
+scaffolding and SDK/signing preparation from zjs215/geely-band-control,
+https://github.com/zjs215/geely-band-control/tree/a234b00b8e095aa41cb43d451d52cd59f2ec2809
+Licensed under the Apache License, Version 2.0. See LICENSE.
+Modifications include a distinct identity and signing setup, a Lynk & Co widget
+host, phone and wrist user interfaces, control protocol and tests.
+
+The Gradle Wrapper retains its upstream notices. The Xiaomi Wearable SDK included
+in the local Android build is subject to Xiaomi's terms. The build downloads the
+pinned AAR from the official sample and checks its SHA-256. The Android and Vela
+toolchains and their dependencies retain their original licenses. The Watch 5 and Vela packages
+include control pictograms from the Chinese Lynk & Co 4.3.1 widget, adapted for
+small displays. These pictograms belong to their respective rights holders.
+Vehicle photographs and live widget content come from the owner's installed app.

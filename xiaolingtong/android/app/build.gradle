@@ -1,0 +1,51 @@
+plugins {
+    id 'com.android.application'
+}
+
+def workspace = rootProject.projectDir.parentFile
+apply from: rootProject.file('pair-signing.gradle')
+
+android {
+    namespace 'com.mario.lynkband'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.mario.lynkband.phone'
+        minSdk 28
+        targetSdk 35
+        versionCode 66
+        versionName '0.3.62'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    packaging {
+        resources {
+            merges += ['META-INF/LICENSE*', 'META-INF/NOTICE*']
+            excludes += ['META-INF/versions/**']
+        }
+    }
+    buildFeatures {
+        buildConfig = true
+    }
+    sourceSets {
+        main.java.srcDir '../shared/src/main/java'
+        main.res.srcDir '../shared/src/main/res'
+        main.res.srcDir 'src/main/phone-res'
+        debug.res.srcDir new File(workspace, '.local/android-res')
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.github.osservatorionessuno:libadb-android-bc:3.5.1'
+    implementation 'org.bouncycastle:bcpkix-jdk15to18:1.84'
+    implementation 'androidx.core:core:1.17.0'
+    implementation files(new File(workspace, '.local/xms-wearable-lib_1.4_release.aar'))
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
+}

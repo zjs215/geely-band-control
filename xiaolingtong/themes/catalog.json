@@ -1,0 +1,161 @@
+{
+  "schema": 1,
+  "themes": [
+    {
+      "id": "ridge",
+      "title": "山脊营地",
+      "version": 3,
+      "assets": {
+        "phone-day": "05296fcef1fc716e023670f0b1b1b10e18315a39cc5f01861b6efffa40ea436a",
+        "watch-day": "9c2494673072eabe6cbee91916c7a434bbbc2f9414fe813e6c6bd6af33c7c137",
+        "watch-night": "2a4eff74013953d91460d4da4677b1efc52a5e516f88227348963c771e7da6a4",
+        "vela-day": "900d07cd59bf5d90bbe62e107f75e2c8e7f4789daf34d0715bc7697763a4dc0e",
+        "vela-night": "538d202d89de41382b8e631d34a82392f91dcd8fdb77eaceb16d594453d4fbb9"
+      }
+    },
+    {
+      "id": "city",
+      "title": "城市天际线",
+      "version": 3,
+      "assets": {
+        "phone-day": "5d4801fd637ea23b68c12b43421e1bbfc34df29d8be33c7db080dbfa98c90b4d",
+        "watch-day": "28ddff22abeea8917a118d51a4d987ce7f71f7c7549fe07b26c377a60cdd6133",
+        "watch-night": "e9df4073f769f63e61f8f32e2e635f8f90fa47cbef0de7d27c83b1feb4a60abc",
+        "vela-day": "64657e1dd42d4624eb0297e84a44758b3d89f5d6f3dc90e62f15892471fcdb00",
+        "vela-night": "51f8980db786e54e5e4d99175dcebe75cb98f142a432a1b89174425b434afe82"
+      }
+    },
+    {
+      "id": "coast",
+      "title": "海岸灯塔",
+      "version": 3,
+      "assets": {
+        "phone-day": "ea9fca32a7ffacc44f26148ef2eb78ba1eb341c0862b0f9ee06c39cd470daea4",
+        "watch-day": "c5f1166df2bb05f71ed3c5ebd20adf38286bd4bff29f3967969af7d13f44bca0",
+        "watch-night": "c1be6e3a2110bc9fa853fd3625a99e739271896243fd7931682e72f6e3fddeaa",
+        "vela-day": "6088a0c156fc65004a55744e788744257683cc714ac5c8896feb6a2cc75b7857",
+        "vela-night": "69d47d84d25ecbba5cc60f3a0616c9040c709b7ca720ef69426814d098fab953"
+      }
+    },
+    {
+      "id": "alpine",
+      "title": "雪山映湖",
+      "version": 3,
+      "assets": {
+        "phone-day": "acc6811f7060241b350239056669ea3279205eeda6279bc87d608eb80aa80d54",
+        "watch-day": "1d07d7c592901d7b4c6195411b11b4f0e626a09779a0872e7425f0b95bffd3cc",
+        "watch-night": "5125c99b4e0dfd3fbdbde668d5e9499ac5c56081b5ea3b306357c3b1675053d9",
+        "vela-day": "7177c08eef8b63dc60bef06e8659e27fc5b39b5421d92581e3292f03649a8983",
+        "vela-night": "b49b57ec522533638c53375dd1133756c5ee8014ec98c496a33c4f93f863ee99"
+      }
+    },
+    {
+      "id": "bamboo",
+      "title": "雾隐竹海",
+      "version": 3,
+      "assets": {
+        "phone-day": "c8755752e8abb5c5127c406b9d349d697feedb82e647fd963241cf3fbe1f565f",
+        "watch-day": "2ab3e8f30310f720c29a7370f75f417d59b38c332b35c2ff836853103d97e3be",
+        "watch-night": "83b35d04dd9ad3ad15333215b88381d3079565a6c4cc079f0eaaa8a9de23d96c",
+        "vela-day": "8db753aab00b5c7b3ec3b0ba228e0459f4eeeb0c7d461ebcd8ace19952a828ab",
+        "vela-night": "d8e89b103c080e17a23408e0838f0e4cf74dbb75bd87b0cb1ad2a6a6863e2e82"
+      }
+    },
+    {
+      "id": "prism",
+      "title": "光栅棱镜",
+      "version": 3,
+      "assets": {
+        "phone-day": "86b80de6fb56a4b4a846092347b02c1d9f46dbd2fee265b0b73472f03691e6a8",
+        "watch-day": "f60040c1867b70bb9fa65a443054709e138930632dc199534ff672892916f1b8",
+        "watch-night": "c009d783a62831f828277e95fdbe38def0d87314117f8fd5f84e01dbd9322e0a",
+        "vela-day": "3d10995086488afa11105053ffca3cee50bc62902cf655ac0751586c857c7e4f",
+        "vela-night": "f245913bc68ac46102aacfb34e622da9503b8f5414a4a39becab92d8b9c6fe8c"
+      }
+    },
+    {
+      "id": "circuit",
+      "title": "脉冲电路",
+      "version": 3,
+      "assets": {
+        "phone-day": "6e9f235e2915b5aecd6f76e6bd478926b8532b9793b940c0ae52e91fb33e88f5",
+        "watch-day": "31cbc91c2f22168e60389ee7e7aff45f166c33eb563b6bb39f8972b644229689",
+        "watch-night": "14754a6946db8327bef626e5900b8070010b2f5b5b195cd5a1940cc62cd0ee67",
+        "vela-day": "71e369f18dec50bc179f5a37c5fe53e6360c197f5a6a500020f28278ee45de03",
+        "vela-night": "fd35474e3574043b0a8affe0c5aa9c42ca96e8a1fd5642fc38c854b5cc4702bb"
+      }
+    },
+    {
+      "id": "paw",
+      "title": "布丁的午后",
+      "version": 3,
+      "assets": {
+        "phone-day": "ac2ed3b6e1c43fe31691cb8fc816f120999f4d92d3f848eb7baff9347850a9a4",
+        "watch-day": "060e9940f153fb8329d6cdec66f97017c89573acf0f9813513348c4006e0515d",
+        "watch-night": "e9d6a902f85f21b9eb8a09d504165e32ef8693b7464130080cfdfc6c1b5392c2",
+        "vela-day": "12c40fb44c789e9e444146d27a7fbe44534dfdc529e22ff25023aa682762de34",
+        "vela-night": "6dcd4e1749e8bc61e606ba2168c31729fac073876915b6d6867569ef841dfe0d"
+      }
+    },
+    {
+      "id": "flux",
+      "title": "流体折光",
+      "version": 3,
+      "assets": {
+        "phone-day": "264ebdd23280c1132a032e77a541f3572d121143c76aedf51943c90655f0da07",
+        "watch-day": "89d6234129e4df2f21ee0135de2ef44f3c44878715be3a7e95cb1b638b9a5795",
+        "watch-night": "a9faaf91d7457767ae4b3f6ec6ee71cfdb33cdf686cf220a030994990f1123ae",
+        "vela-day": "f0638fdc763dca3757af7208d54254a35090986ab0346d557a933077c0a53e27",
+        "vela-night": "883ff8866a14b0958cc7b2a3ce77c7f61798cbfd24e48125e4a2303abab1ff2b"
+      }
+    },
+    {
+      "id": "origami",
+      "title": "折角构成",
+      "version": 1,
+      "assets": {
+        "phone-day": "aefe3bc8e278f91ad4d6ed43fef33224376ab41d85102e178305b400473231e0",
+        "watch-day": "aefe3bc8e278f91ad4d6ed43fef33224376ab41d85102e178305b400473231e0",
+        "watch-night": "e4a8b12c6dc05954cb8a3660c668ea3dbf7bf1a1c92cfb43d774fc245746158e",
+        "vela-day": "80a6b66de4019d0f2e75f7edb1bd8acdc2340de16b97341215b4d630432a9cd1",
+        "vela-night": "f80ed4bba3b5269c9358ffd2d8423e6e333f1bc609b5e0239214a69dd7aedee4"
+      }
+    },
+    {
+      "id": "tape",
+      "title": "磁带纪元",
+      "version": 1,
+      "assets": {
+        "phone-day": "d0619505abbe3faacb52f4df42b84e93d66b3660d2058febab2196906e095532",
+        "watch-day": "d0619505abbe3faacb52f4df42b84e93d66b3660d2058febab2196906e095532",
+        "watch-night": "892984d98cbc0731eecb0d8629e5e0a6b8695b80fefe0f0e61e8600c5b1058ac",
+        "vela-day": "c2d416df86c2d85e54d0e3baf512483f869fc1f8f6ab81e82f1bf20d7cd5fbdb",
+        "vela-night": "9b902818b56a11e39d03f645ec91e0c2edd50d561f3c5c21d1024cdd27fbface"
+      }
+    },
+    {
+      "id": "hamster",
+      "title": "仓鼠邮差",
+      "version": 1,
+      "assets": {
+        "phone-day": "d127075a1edfafb713a729b371cd91b596b362eebe4e6c051443f8bb1bf2c9ce",
+        "watch-day": "d127075a1edfafb713a729b371cd91b596b362eebe4e6c051443f8bb1bf2c9ce",
+        "watch-night": "d4a8f2816c99d76fac490e9ea4c9df95692aa60a187acc5ffbb86c1a1e8032e3",
+        "vela-day": "fd4041ac764e157084afc1e7ec020ab78c814722fb3d663a16bd49eee2872c69",
+        "vela-night": "fc2adfa7be223cd0d8650a1536f94986d71e6112a8831eb848fc9acb1f399bd1"
+      }
+    },
+    {
+      "id": "enamel",
+      "title": "珐琅流沙",
+      "version": 1,
+      "assets": {
+        "phone-day": "d6ef3e1f074c2bfa8fb59022786cba34b39b152dc24d67b37676b3184d292c99",
+        "watch-day": "d6ef3e1f074c2bfa8fb59022786cba34b39b152dc24d67b37676b3184d292c99",
+        "watch-night": "28584ea064bdaecacc01162b36276b2301402e783b1e6ee0df3329fd31f6177d",
+        "vela-day": "99a8884ff22ca24517348e29ba827c44852454085162d056ad0296d82df21124",
+        "vela-night": "40a88ea2429b2b2463870132362a0fa0da27ea0ef893c21543e4f9f94c434572"
+      }
+    }
+  ]
+}

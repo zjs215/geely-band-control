@@ -1,0 +1,324 @@
+<template>
+  <div class="page" style="background-color: {{ colors.bg }}">
+    <list class="feed" style="width: {{ layout.width }}; height: {{ layout.height }}" if="{{ mode === 'home' }}">
+      <list-item type="vehicle" class="block">
+        <text class="title" style="color: {{ colors.ink }}">{{ vehicle }}</text>
+        <text class="caption" style="color: {{ colors.link }}; font-size: {{ layout.caption }}">{{ status }}</text>
+      </list-item>
+      <list-item type="range" class="range">
+        <text class="number" style="color: {{ colors.ink }}">{{ range }}</text>
+        <text class="unit" style="color: {{ colors.muted }}">{{ unit }}</text>
+      </list-item>
+      <list-item type="energy" class="energy" style="flex-direction: {{ layout.single ? 'column' : 'row' }}">
+        <text class="energyText" style="color: {{ colors.ink }}; font-size: {{ layout.caption }}">电量 {{ battery }}</text>
+        <text class="energyText" style="color: {{ colors.ink }}; font-size: {{ layout.caption }}">油量 {{ fuel }}</text>
+      </list-item>
+      <list-item type="condition" class="block" if="{{ condition }}">
+        <text class="caption" style="color: {{ colors.muted }}; font-size: {{ layout.caption }}">{{ condition }}</text>
+      </list-item>
+      <list-item class="slotRow" type="actionpair" for="{{ rows }}" tid="id">
+        <div class="tile" style="width: {{ layout.tileWidth }}; height: {{ layout.tileHeight }}; background-color: {{ colors.tile }}" @click="prepare($item.left.slot)">
+          <div class="badge" style="background-color: {{ $item.left.tint }}"><image class="glyph" src="{{ $item.left.glyph }}"></image></div>
+          <text class="tileName" style="color: {{ colors.ink }}; font-size: {{ layout.caption }}">{{ $item.left.displayLabel }}</text>
+        </div>
+        <div class="tile" show="{{ $item.right.slot !== '' }}" style="width: {{ layout.tileWidth }}; height: {{ layout.tileHeight }}; background-color: {{ colors.tile }}" @click="prepare($item.right.slot)">
+          <div class="badge" style="background-color: {{ $item.right.tint }}"><image class="glyph" src="{{ $item.right.glyph }}"></image></div>
+          <text class="tileName" style="color: {{ colors.ink }}; font-size: {{ layout.caption }}">{{ $item.right.displayLabel }}</text>
+        </div>
+      </list-item>
+      <list-item class="block" type="receipt">
+        <text class="caption" style="color: {{ colors.muted }}; font-size: {{ layout.caption }}">{{ time }}</text>
+        <text class="caption" show="{{ !!note }}" style="color: {{ colors.warm }}; font-size: {{ layout.caption }}">{{ note }}</text>
+      </list-item>
+      <list-item class="block" type="refresh">
+        <text class="button" style="height: {{ layout.buttonHeight }}; color: {{ colors.ink }}; background-color: {{ colors.surface }}" @click="refresh">刷新车况</text>
+      </list-item>
+    </list>
+    <list class="feed" style="width: {{ layout.width }}; height: {{ layout.height }}" if="{{ mode === 'confirm' }}">
+      <list-item class="block" type="question">
+        <text class="caption" style="color: {{ colors.link }}; font-size: {{ layout.caption }}">确认车辆操作</text>
+        <div class="badge" style="background-color: {{ confirmTint }}"><image class="glyph" src="{{ confirmGlyph }}"></image></div>
+        <text class="title" style="color: {{ colors.ink }}">{{ question }}</text>
+        <text class="caption" style="color: {{ colors.muted }}; font-size: {{ layout.caption }}">由手机领克卡片执行</text>
+      </list-item>
+      <list-item class="block" type="confirm">
+        <text class="button" style="height: {{ layout.buttonHeight }}; color: {{ colors.onWarm }}; background-color: {{ colors.warm }}" @click="confirm">确认操作</text>
+      </list-item>
+      <list-item class="block" type="cancel">
+        <text class="button" style="height: {{ layout.buttonHeight }}; color: {{ colors.ink }}; background-color: {{ colors.surface }}" @click="cancel">取消</text>
+      </list-item>
+    </list>
+  </div>
+</template>
+
+<script>
+const palettes = {
+  light: {bg:'#f4f7fa', tile:'#dbebf7', surface:'#e8eef4', ink:'#162635', muted:'#4e6172', link:'#125d90', warm:'#894309', onWarm:'#ffffff', on:'#67d89e', loading:'#ffcf54', unknown:'#b2bac4'},
+  dark: {bg:'#0a0d14', tile:'#192b3e', surface:'#212a38', ink:'#e9edf3', muted:'#a5afbe', link:'#5ab9fc', warm:'#ffbf75', onWarm:'#241609', on:'#59cf91', loading:'#ffcc46', unknown:'#a2abb6'}
+}
+function screenLayout(info) {
+  const width = Number(info.screenWidth)
+  const height = Number(info.screenHeight)
+  const ratio = width > 0 && height > 0 && isFinite(height / width) ? height / width : 0
+  const pill = info.screenShape === 'pill-shaped' || (info.screenShape !== 'circle' && ratio >= 1.65)
+  const rect = info.screenShape === 'rect' && !pill
+  const single = pill || !(width >= 280)
+  // Center the scroll viewport inside the outline, so even its first/last row is reachable.
+  // A capsule's two round ends together need just under half a screen width at 84% usable width.
+  const usableHeight = pill ? 98 - Math.ceil(46 / Math.max(1, ratio)) : rect ? 94 : 66
+  return {width:pill ? '84%' : rect ? '94%' : '72%', height:usableHeight + '%', single:single,
+    tileWidth:single ? '98%' : '48%', tileHeight:single ? '132px' : '108px',
+    caption:single ? '28px' : '21px', buttonHeight:single ? '84px' : '58px'}
+}
+const icons = ['LOCK','FIND','ENGINE','TRUNK','SUNROOF','CLIMATE','WINDOW']
+function controlState(item) {
+  if (item.controlState !== undefined) {
+    return ['open','closed','loading'].indexOf(item.controlState) >= 0 ? item.controlState : 'unknown'
+  }
+  // Older companions only supply a caption. Never infer state from the (opposite) action.
+  const match = /\.(开|关|加载|未知)$/.exec(item.displayLabel || '')
+  return match ? {'开':'open','关':'closed','加载':'loading','未知':'unknown'}[match[1]] : 'legacy'
+}
+function actionable(item) {
+  const state = controlState(item)
+  return item.enabled !== false && state !== 'loading' && state !== 'unknown'
+}
+function controlTile(item, colors, light) {
+  const state = controlState(item)
+  const tint = state === 'open' ? colors.on : state === 'loading' ? colors.loading : state === 'unknown' ? colors.unknown : colors.tile
+  const category = icons.indexOf(item.category) >= 0 ? item.category : 'OTHER'
+  // Use the high-contrast dark glyph on the bright status badge in either theme.
+  const name = typeof item.controlName === 'string' && item.controlName.trim() ||
+    (typeof item.displayLabel === 'string' && item.displayLabel.replace(/\.(开|关|加载|未知)$/, '')) || item.label || '待标记'
+  return {slot:item.slot, controlName:name, enabled:actionable(item), state:state, tint:tint,
+    glyph:'/common/controls/' + (light || tint !== colors.tile ? 'day/' : '') + category + '.png'}
+}
+export default {
+  private: {
+    mode: 'home', vehicle: '腕上领克', status: '正在连接手机', range: '—', unit: 'km',
+    condition: '', battery: '—', fuel: '—', time: '等候卡片更新', note: '',
+    actions: [], rows: [], layout: screenLayout({}), question: '', confirmGlyph: '/common/controls/OTHER.png',
+    confirmTint: palettes.dark.tile, colors: palettes.dark
+  },
+  onInit() {
+    this.appearance = ''
+    this.storage = require('@system.storage')
+    if (this.storage.get) this.storage.get({key:'appearance', success: saved => {
+      if (!this.appearance && (saved === 'light' || saved === 'dark')) {
+        this.appearance = saved
+        this.colors = palettes[saved]
+        this.updateRows()
+      }
+    }})
+    this.retries = 0
+    this.seq = 0
+    this.visible = false
+    this.conn = null
+    this.pending = null
+    this.choice = null
+    this.pollTimer = null
+    this.requestTimer = null
+    this.confirmTimer = null
+    try {
+      require('@system.device').getInfo({success: info => {
+        this.layout = screenLayout(info || {})
+        this.updateRows()
+      }})
+    } catch (error) { /* Older runtimes keep the inset, single-column default. */ }
+  },
+  updateRows() {
+    const columns = this.layout.single ? 1 : 2
+    const tiles = this.actions.map(item => controlTile(item, this.colors, this.appearance === 'light'))
+    const empty = {slot:'', displayLabel:'', tint:this.colors.tile, glyph:'/common/controls/OTHER.png'}
+    const rows = []
+    for (let i = 0; i < tiles.length; i += columns) {
+      rows.push({id:tiles[i].slot, left:tiles[i], right:columns === 2 && tiles[i + 1] || empty})
+    }
+    this.rows = rows
+  },
+  onShow() {
+    this.visible = true
+    this.retries = 0
+    this.open()
+  },
+  onHide() { this.sleepPage() },
+  onDestroy() {
+    this.sleepPage()
+  },
+  releaseConnection() {
+    if (!this.conn) return
+    this.conn.onmessage = null
+    this.conn.onopen = null
+    this.conn.onclose = null
+    this.conn.onerror = null
+    this.conn = null
+  },
+  onBackPress() {
+    if (this.mode === 'home') return false
+    if (this.mode === 'confirm') this.cancel()
+    else this.home()
+    return true
+  },
+  sleepPage() {
+    this.visible = false
+    this.releaseConnection()
+    clearTimeout(this.pollTimer)
+    this.clearRequest()
+    this.dropChoice()
+    this.actions = []
+    this.rows = []
+    this.mode = 'home'
+  },
+  open() {
+    if (!this.visible) return
+    try {
+      if (!this.conn) {
+        const connection = require('@system.interconnect').instance()
+        this.conn = connection
+        connection.onmessage = event => { if (event) this.receive(event.data) }
+        connection.onopen = () => { if (this.visible && !this.pending && !this.choice) this.send('status') }
+        connection.onclose = () => this.lost('手机已断开')
+        connection.onerror = () => this.lost('检查手机通信服务')
+      }
+      if (!this.pending && !this.choice) this.send('status')
+    } catch (error) { this.lost('等待小米运动健康连接') }
+  },
+  schedule(delay) {
+    clearTimeout(this.pollTimer)
+    if (this.visible && !this.choice) this.pollTimer = setTimeout(() => this.open(), delay)
+  },
+  clearRequest() {
+    clearTimeout(this.requestTimer)
+    this.pending = null
+  },
+  dropChoice() {
+    clearTimeout(this.confirmTimer)
+    this.choice = null
+    this.question = ''
+  },
+  lost(reason) {
+    if (!this.visible) return
+    const uncertain = this.pending && this.pending.type === 'execute'
+    this.clearRequest()
+    this.dropChoice()
+    this.mode = 'home'
+    this.actions = []
+    this.rows = []
+    this.status = reason
+    this.note = uncertain ? '结果待核对，请查看官方车况' : ''
+    this.releaseConnection()
+    const delay = this.retries === 0 ? 0 : 1000 * Math.pow(2, this.retries - 1)
+    this.retries = Math.min(this.retries + 1, 5)
+    this.schedule(delay)
+  },
+  send(type, choice) {
+    if (!this.visible || this.pending || !this.conn) return
+    clearTimeout(this.pollTimer)
+    const request = {v:1, id:Date.now().toString(36) + '_' + (++this.seq), type:type, selectedActions:true, supportsControlState:true}
+    if (choice) {
+      request.slot = choice.slot
+      request.key = choice.key
+      request.label = choice.label
+      if (choice.token) request.token = choice.token
+    }
+    this.pending = request
+    const fail = () => { if (this.pending === request) this.lost('手机未响应') }
+    this.requestTimer = setTimeout(fail, 5500)
+    try { this.conn.send({data:request, fail:fail}) } catch (error) { fail() }
+  },
+  receive(raw) {
+    if (!this.visible || !this.pending) return
+    let reply
+    try { reply = typeof raw === 'string' ? JSON.parse(raw) : raw } catch (error) { return }
+    const request = this.pending
+    if (!reply || reply.v !== 1 || reply.id !== request.id) return
+    this.clearRequest()
+    this.retries = 0
+    const appearance = reply.appearance
+    if ((appearance === 'light' || appearance === 'dark') && appearance !== this.appearance) {
+      this.appearance = appearance
+      this.colors = palettes[appearance]
+      if (this.storage.set) this.storage.set({key:'appearance', value:appearance})
+    }
+    const s = reply.data || {}
+    this.vehicle = s.vehicle || '腕上领克'
+    this.range = s.range || '—'
+    this.unit = s.unit || 'km'
+    this.battery = s.battery || '—'
+    this.fuel = s.fuel || '—'
+    this.condition = s.condition || ''
+    this.time = s.time || '等候卡片更新'
+    this.status = reply.status || '手机已连接'
+    this.actions = Array.isArray(reply.actions) ? reply.actions : []
+    this.updateRows()
+    if (reply.note) this.note = reply.note
+    if (request.type === 'prepare' && reply.token && reply.label === request.label) {
+      this.choice = {slot:request.slot, key:request.key, label:request.label, token:reply.token}
+      const target = this.actions.find(item => item.slot === request.slot && item.key === request.key
+        && item.label === request.label && actionable(item))
+      if (!target) { this.dropChoice(); this.schedule(200); return }
+      const tile = controlTile(target, this.colors, this.appearance === 'light')
+      this.confirmGlyph = tile.glyph
+      this.confirmTint = tile.tint
+      this.confirmOpened = Date.now()
+      this.question = reply.label
+      this.mode = 'confirm'
+      this.confirmTimer = setTimeout(() => { this.note = '确认已过期'; this.cancel() }, 12000)
+      return
+    }
+    if (request.type === 'execute') this.mode = 'home'
+    this.schedule(request.type === 'refresh' || request.type === 'execute' ? 1600 : 5000)
+  },
+  refresh() {
+    if (!this.conn) { this.open(); return }
+    if (!this.pending) { this.note = ''; this.send('refresh') }
+  },
+  controls() { this.mode = 'home'; this.note = '' },
+  home() {
+    if (this.pending && this.pending.type === 'prepare') this.clearRequest()
+    this.dropChoice()
+    this.mode = 'home'
+    this.note = ''
+    this.schedule(200)
+  },
+  prepare(id) {
+    if (this.pending) { this.note = '正在同步，请稍候'; return }
+    const selected = this.actions.find(item => item.slot === id)
+    if (selected && !actionable(selected)) { this.note = '请在手机核对动作标记和卡片状态'; return }
+    if (selected) { this.note = ''; this.send('prepare', selected) }
+  },
+  confirm() {
+    if (!this.choice || this.pending) return
+    const elapsed = Date.now() - this.confirmOpened
+    if (elapsed < 0 || elapsed >= 12000) { this.note = '确认已过期'; this.cancel(); return }
+    if (elapsed < 500) return
+    const current = this.choice
+    this.dropChoice()
+    this.mode = 'home'
+    this.note = '等候手机回执'
+    this.send('execute', current)
+  },
+  cancel() { this.dropChoice(); this.mode = 'home'; this.schedule(200) }
+}
+</script>
+
+<style>
+.page { width:100%; height:100%; background-color:#0a0d14; justify-content:center; align-items:center; }
+.feed { flex-direction:column; }
+.block { flex-direction:column; align-items:center; padding:5px 0; }
+.title, .caption, .tileName { width:100%; text-align:center; }
+.title { font-size:32px; }
+.caption { margin:2px 0; }
+.range { flex-direction:row; align-items:center; justify-content:center; padding:4px 0; }
+.number { font-size:55px; }
+.unit { font-size:23px; margin-left:6px; }
+.energy { justify-content:space-around; align-items:center; padding:4px 0; }
+.energyText { text-align:center; }
+.slotRow { padding:4px 0; flex-direction:row; justify-content:space-around; align-items:center; }
+.tile { border-radius:18px; align-items:center; justify-content:center; flex-direction:column; }
+.badge { width:48px; height:48px; border-radius:24px; align-items:center; justify-content:center;
+  transition-property:background-color; transition-duration:180ms; transition-timing-function:ease-out; }
+.glyph { width:38px; height:38px; }
+.tileName { lines:2; text-overflow:ellipsis; }
+.button { width:98%; border-radius:18px; font-size:27px; text-align:center; }
+</style>

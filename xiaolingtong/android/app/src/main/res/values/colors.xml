@@ -1,0 +1,13 @@
+<resources>
+    <color name="bg">#F4F7FA</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="control">#E8EEF4</color>
+    <color name="tile">#DBEBF7</color>
+    <color name="ink">#162635</color>
+    <color name="muted">#4E6172</color>
+    <color name="link">#125D90</color>
+    <color name="on_link">#FFFFFF</color>
+    <color name="warm">#894309</color>
+    <color name="on_warm">#FFFFFF</color>
+    <color name="line">#C1CED9</color>
+</resources>

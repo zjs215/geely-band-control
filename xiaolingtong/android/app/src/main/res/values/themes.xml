@@ -1,0 +1,27 @@
+<resources>
+    <style name="WristThemeBase" parent="PlatformApp">
+        <item name="android:windowBackground">@color/bg</item>
+        <item name="android:colorAccent">@color/link</item>
+        <item name="android:alertDialogTheme">@style/WristDialog</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+    </style>
+    <style name="WristTheme" parent="WristThemeBase"/>
+    <style name="WristWatch" parent="WristTheme">
+        <item name="android:windowFullscreen">true</item>
+    </style>
+    <style name="WristDialog" parent="PlatformDialog">
+        <item name="android:windowBackground">@drawable/dialog_surface</item>
+        <item name="android:colorAccent">@color/link</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="android:colorBackground">@color/surface</item>
+        <item name="android:backgroundDimAmount">0.48</item>
+        <item name="android:windowTitleStyle">@style/DialogTitle</item>
+    </style>
+    <style name="DialogTitle" parent="@android:style/TextAppearance.Material.Title">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">20sp</item>
+    </style>
+</resources>

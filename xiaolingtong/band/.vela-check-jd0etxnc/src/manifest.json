@@ -1,0 +1,29 @@
+{
+  "package": "com.mario.lynkband.phone",
+  "name": "腕上领克",
+  "versionName": "0.2.6",
+  "versionCode": 8,
+  "minPlatformVersion": 1000,
+  "minAPILevel": 1,
+  "icon": "/common/icon.png",
+  "deviceTypeList": ["watch"],
+  "features": [
+    { "name": "system.device" },
+    { "name": "system.interconnect" },
+    { "name": "system.storage" },
+    { "name": "system.vibrator" }
+  ],
+  "config": {
+    "designWidth": 336,
+    "logLevel": "warn"
+  },
+  "display": {
+    "backgroundColor": "#0a0d14"
+  },
+  "router": {
+    "entry": "pages/garage",
+    "pages": {
+      "pages/garage": { "component": "index", "path": "/garage" }
+    }
+  }
+}

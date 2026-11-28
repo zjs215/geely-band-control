@@ -1,0 +1,31 @@
+{
+  "package": "com.mario.lynkband.phone",
+  "name": "小领通",
+  "versionName": "0.2.34",
+  "versionCode": 36,
+  "minPlatformVersion": 1000,
+  "minAPILevel": 1,
+  "icon": "/common/launcher-round.png",
+  "deviceTypeList": ["watch"],
+  "features": [
+    { "name": "system.app" },
+    { "name": "system.device" },
+    { "name": "system.file" },
+    { "name": "system.storage" },
+    { "name": "system.interconnect" },
+    { "name": "system.vibrator" }
+  ],
+  "config": {
+    "designWidth": 336,
+    "logLevel": "warn"
+  },
+  "display": {
+    "backgroundColor": "#0a0d14"
+  },
+  "router": {
+    "entry": "pages/garage",
+    "pages": {
+      "pages/garage": { "component": "index", "path": "/garage" }
+    }
+  }
+}

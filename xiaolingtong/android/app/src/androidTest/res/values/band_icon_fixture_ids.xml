@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item type="id" name="rl_widget_cal_state" />
+    <item type="id" name="widget_name" />
+    <item type="id" name="time" />
+    <item type="id" name="condition_txt" />
+    <item type="id" name="fr_unlock" />
+    <item type="id" name="unlock" />
+    <item type="id" name="fr_window" />
+    <item type="id" name="window" />
+</resources>

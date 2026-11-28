@@ -1,0 +1,27 @@
+def workspace = rootProject.projectDir.parentFile
+def signing = new Properties()
+def signingFile = new File(workspace, '.local/mario/signing.properties')
+if (!signingFile.isFile()) {
+    throw new GradleException('Run scripts/prepare.ps1 to create the matching Android and Vela signing files.')
+}
+signingFile.withInputStream { signing.load(it) }
+
+android {
+    signingConfigs {
+        localPair {
+            storeFile new File(workspace, '.local/mario/mario.p12')
+            storeType 'PKCS12'
+            storePassword signing.getProperty('password')
+            keyAlias 'mario'
+            keyPassword signing.getProperty('password')
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.localPair
+        }
+        debug {
+            signingConfig signingConfigs.localPair
+        }
+    }
+}

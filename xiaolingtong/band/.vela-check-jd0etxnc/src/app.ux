@@ -1,0 +1,7 @@
+<script>
+export default {
+  onError(error) {
+    console.error('腕上领克运行异常', error && (error.message || error))
+  }
+}
+</script>
